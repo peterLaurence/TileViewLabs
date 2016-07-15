@@ -34,10 +34,6 @@ public class TileCanvasViewGroup extends View {
   private BitmapProvider mBitmapProvider;
 
   private DetailLevel mDetailLevelToRender;
-  private DetailLevel mLastRequestedDetailLevel;
-  private DetailLevel mLastRenderedDetailLevel;
-
-  private Rect mDrawingRect = new Rect();
 
   private boolean mRenderIsCancelled = false;
   private boolean mRenderIsSuppressed = false;
@@ -55,9 +51,6 @@ public class TileCanvasViewGroup extends View {
   private int mRenderBuffer = DEFAULT_RENDER_BUFFER;
 
   private TileRenderPoolExecutor mTileRenderPoolExecutor;
-
-  private Set<Tile> mTilesInCurrentViewport = new HashSet<>();
-  private Set<Tile> mPartiallyOpaqueTiles = new HashSet<>();
 
   private Region mFullyOpaqueRegion = new Region();
 
@@ -173,7 +166,7 @@ public class TileCanvasViewGroup extends View {
    */
   private void drawTiles( Canvas canvas ) {
     mFullyOpaqueRegion.setEmpty();
-    for(Tile tile : mTilesInCurrentViewport) {
+    for(Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
       if( tile.getState() == Tile.State.DECODED ) {
         boolean dirty = tile.composeWithOpacity();
         if( !dirty ) {
@@ -202,7 +195,7 @@ public class TileCanvasViewGroup extends View {
     // TODO: debug
     Set<Tile> drawnTiles = new HashSet<>();
     Set<Tile> undecodedTiles = new HashSet<>();
-    for(Tile tile : mTilesInCurrentViewport) {
+    for(Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
       if( tile.getState() == Tile.State.DECODED ) {
         tile.draw( canvas );
         //drawnTiles.add( tile );
@@ -219,24 +212,25 @@ public class TileCanvasViewGroup extends View {
   }
 
   private Set<Tile> mDecodedTilesFromPreviousDetailLevel = new HashSet<>();
-  public void updateTileSet( DetailLevel detailLevel ) {  // TODO: need this?
-    mDetailLevelToRender = detailLevel;
-    if( mDetailLevelToRender == null ) {
+  public void updateTileSet( DetailLevel detailLevel ) {
+    if( detailLevel == null ) {
       return;
     }
-    if( mDetailLevelToRender.equals( mLastRenderedDetailLevel ) ) {
+    if( detailLevel.equals( mDetailLevelToRender ) ) {
       return;
     }
-    mDecodedTilesFromPreviousDetailLevel.clear();
-    for( Tile tile : mTilesInCurrentViewport ) {
-      if(tile.getState() == Tile.State.DECODED ) {
-        mDecodedTilesFromPreviousDetailLevel.add( tile );
+    if( mDetailLevelToRender != null ) {
+      mDecodedTilesFromPreviousDetailLevel.clear();
+      for( Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
+        if( tile.getState() == Tile.State.DECODED ) {
+          mDecodedTilesFromPreviousDetailLevel.add( tile );
+        }
       }
     }
     log("saving previous tiles, total=" + mDecodedTilesFromPreviousDetailLevel.size());
-    mTilesInCurrentViewport.clear();
+    mLastStateSnapshot = null;
+    mDetailLevelToRender = detailLevel;
     mFullyOpaqueRegion.setEmpty();
-    mLastRenderedDetailLevel = mDetailLevelToRender;
     cancelRender();
     requestRender();
   }
@@ -248,7 +242,6 @@ public class TileCanvasViewGroup extends View {
   public void clear() {
     suppressRender();
     cancelRender();
-    mTilesInCurrentViewport.clear();
     invalidate();
   }
 
@@ -259,26 +252,30 @@ public class TileCanvasViewGroup extends View {
     }
   }
 
+  private DetailLevel.StateSnapshot mLastStateSnapshot;
+
   private void beginRenderTask() {
 
+    if(mDetailLevelToRender == null){
+      log("no detail level set");
+      return;
+    }
+
     // if visible columns and rows are same as previously computed, fast-fail
-    boolean changed = mDetailLevelToRender.computeCurrentState();  // TODO: maintain compare state here instead?
+    DetailLevel.StateSnapshot currentStateSnapshot = mDetailLevelToRender.computeCurrentState();
+    boolean changed = !currentStateSnapshot.equals( mLastStateSnapshot );  // TODO: maintain compare state here instead?
     if(!changed){
       log("no change in viewport, quit");
       return;
     }
 
+    mLastStateSnapshot = currentStateSnapshot;
+
     // determine tiles are mathematically within the current viewport; force re-computation
     mDetailLevelToRender.computeVisibleTilesFromViewport();
 
-    boolean wereTilesAdded = mTilesInCurrentViewport.addAll( mDetailLevelToRender.getVisibleTilesFromLastViewportComputation() );
-
-   // log( "about to pass these to the Executor: ");
-   // logTileSet( mTilesInCurrentViewport );
-
-    //log("wereTilesAdded=" + wereTilesAdded);
-    if( wereTilesAdded && mTileRenderPoolExecutor != null ) {
-      mTileRenderPoolExecutor.queue( this, mTilesInCurrentViewport );
+    if( mTileRenderPoolExecutor != null ) {
+      mTileRenderPoolExecutor.queue( this, mDetailLevelToRender.getTilesVisibleInViewport() );
     }
 
   }
@@ -288,24 +285,6 @@ public class TileCanvasViewGroup extends View {
    */
   public void cleanup() {
     log("!!!CLEANUP!!!");
-    // these tiles are mathematically within the current viewport, and should be already computed
-    Set<Tile> recentlyComputedVisibleTileSet;
-    try {
-      recentlyComputedVisibleTileSet = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
-    } catch( DetailLevel.StateNotComputedException e ){
-      return;
-    }
-    // use an iterator to avoid concurrent modification
-    Iterator<Tile> tilesInCurrentViewportIterator = mTilesInCurrentViewport.iterator();
-    while( tilesInCurrentViewportIterator.hasNext() ) {
-      Tile tile = tilesInCurrentViewportIterator.next();
-      // this tile was visible previously, but is no longer, destroy and de-list it
-      if( !recentlyComputedVisibleTileSet.contains( tile ) ) {
-
-        tile.destroy( mShouldRecycleBitmaps );
-        tilesInCurrentViewportIterator.remove();
-      }
-    }
     Rect currentViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
     log("currentViewport" + currentViewport.toShortString());
     Iterator<Tile> tilesInPreviousDetailLevelIterator = mDecodedTilesFromPreviousDetailLevel.iterator();
@@ -328,7 +307,7 @@ public class TileCanvasViewGroup extends View {
   // this tile has been decoded by the time it gets passed here
   void addTileToCanvas( Tile tile ) {
     //log("addTileToCanvas");
-    if( mDetailLevelToRender.hasComputedTilesInViewport() && !mDetailLevelToRender.getVisibleTilesFromLastViewportComputation().contains( tile ) ) {
+    if( mDetailLevelToRender.hasComputedState() && !mDetailLevelToRender.getVisibleTilesFromLastViewportComputation().contains( tile ) ) {
       log("addTileToCanvas, this tile is not in viewport, don't invalidate " + tile.toShortString());
       return;
     }
@@ -432,7 +411,6 @@ public class TileCanvasViewGroup extends View {
       if( mTileRenderListener != null ) {
         mTileRenderListener.onRenderComplete();
       }
-      mLastRenderedDetailLevel = mDetailLevelToRender;
       requestRender();
       invalidate();
     }

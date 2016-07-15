@@ -226,7 +226,7 @@ public class Tile {
     mState = State.DECODED;
   }
 
-  void destroy( boolean shouldRecycle ) {
+  public void destroy( boolean shouldRecycle ) {
     mState = State.DESTROYED;
     if( shouldRecycle && mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();

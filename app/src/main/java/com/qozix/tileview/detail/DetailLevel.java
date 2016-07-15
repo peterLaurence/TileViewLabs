@@ -2,10 +2,12 @@ package com.qozix.tileview.detail;
 
 import android.graphics.Rect;
 import android.support.annotation.NonNull;
+import android.util.Log;
 
 import com.qozix.tileview.tiles.Tile;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 
 public class DetailLevel implements Comparable<DetailLevel> {
@@ -29,7 +31,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
     mTileHeight = tileHeight;
   }
 
-  public DetailLevelManager getDetailLevelManager(){
+  public DetailLevelManager getDetailLevelManager() {
     return mDetailLevelManager;
   }
 
@@ -38,7 +40,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
    *
    * @return True if there has been a change, false otherwise.
    */
-  public boolean computeCurrentState() {
+  public StateSnapshot computeCurrentState() {
     float relativeScale = getRelativeScale();
     int drawableWidth = mDetailLevelManager.getScaledWidth();
     int drawableHeight = mDetailLevelManager.getScaledHeight();
@@ -53,13 +55,11 @@ public class DetailLevel implements Comparable<DetailLevel> {
     int rowEnd = (int) Math.ceil( viewport.bottom / offsetHeight );
     int columnStart = (int) Math.floor( viewport.left / offsetWidth );
     int columnEnd = (int) Math.ceil( viewport.right / offsetWidth );
-    StateSnapshot stateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );  // TODO: set
-    boolean sameState = stateSnapshot.equals( mLastStateSnapshot );
-    mLastStateSnapshot = stateSnapshot;
-    return !sameState;
+    mLastStateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );  // TODO: set
+    return mLastStateSnapshot;
   }
 
-  public boolean hasComputedTilesInViewport(){
+  public boolean hasComputedState() {
     return mLastStateSnapshot != null;
   }
 
@@ -69,20 +69,39 @@ public class DetailLevel implements Comparable<DetailLevel> {
    * @return List of Tile instances describing the currently visible viewport.
    */
   public Set<Tile> getVisibleTilesFromLastViewportComputation() {
-    if( !hasComputedTilesInViewport() ) {
+    if( !hasComputedState() ) {
       throw new StateNotComputedException();
     }
     return mTilesVisibleInViewport;
   }
 
   public void computeVisibleTilesFromViewport() {
-    mTilesVisibleInViewport.clear();
+    if( !hasComputedState() ) {
+      Log.d( getClass().getSimpleName(), "need state before computing tiles" );
+      return;
+    }
+    Iterator<Tile> visibleTileIterator = mTilesVisibleInViewport.iterator();
+    while( visibleTileIterator.hasNext() ) {
+      Tile tile = visibleTileIterator.next();
+      if( !mLastStateSnapshot.contains( tile ) ) {
+        tile.destroy( true );  // TODO:
+      }
+      // separate block since it might have been destroyed elsewhere
+      if( tile.getState() == Tile.State.DESTROYED ) {
+        visibleTileIterator.remove();
+      }
+    }
     for( int rowCurrent = mLastStateSnapshot.rowStart; rowCurrent < mLastStateSnapshot.rowEnd; rowCurrent++ ) {
       for( int columnCurrent = mLastStateSnapshot.columnStart; columnCurrent < mLastStateSnapshot.columnEnd; columnCurrent++ ) {
         Tile tile = new Tile( columnCurrent, rowCurrent, mTileWidth, mTileHeight, mData, this );
         mTilesVisibleInViewport.add( tile );
       }
     }
+
+  }
+
+  public Set<Tile> getTilesVisibleInViewport() {
+    return mTilesVisibleInViewport;
   }
 
   /**
@@ -143,7 +162,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
     }
   }
 
-  private static class StateSnapshot {
+  public static class StateSnapshot {
     public int rowStart;
     public int rowEnd;
     public int columnStart;
@@ -158,9 +177,19 @@ public class DetailLevel implements Comparable<DetailLevel> {
       this.columnEnd = columnEnd;
     }
 
+    public boolean contains( Tile tile ) {
+      return tile.getColumn() >= columnStart
+        && tile.getColumn() <= columnEnd
+        && tile.getRow() >= rowStart
+        && tile.getRow() <= rowEnd;
+    }
+
     public boolean equals( Object o ) {
       if( o == this ) {
         return true;
+      }
+      if( o == null ) {
+        return false;
       }
       if( o instanceof StateSnapshot ) {
         StateSnapshot stateSnapshot = (StateSnapshot) o;
