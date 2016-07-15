@@ -44,7 +44,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
     int drawableHeight = mDetailLevelManager.getScaledHeight();
     float offsetWidth = mTileWidth * relativeScale;
     float offsetHeight = mTileHeight * relativeScale;
-    Rect viewport = new Rect( mDetailLevelManager.getComputedViewport() );
+    Rect viewport = new Rect( mDetailLevelManager.getComputedViewport() ); // TODO: set
     viewport.top = Math.max( viewport.top, 0 );
     viewport.left = Math.max( viewport.left, 0 );
     viewport.right = Math.min( viewport.right, drawableWidth );
@@ -53,10 +53,14 @@ public class DetailLevel implements Comparable<DetailLevel> {
     int rowEnd = (int) Math.ceil( viewport.bottom / offsetHeight );
     int columnStart = (int) Math.floor( viewport.left / offsetWidth );
     int columnEnd = (int) Math.ceil( viewport.right / offsetWidth );
-    StateSnapshot stateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );
+    StateSnapshot stateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );  // TODO: set
     boolean sameState = stateSnapshot.equals( mLastStateSnapshot );
     mLastStateSnapshot = stateSnapshot;
     return !sameState;
+  }
+
+  public boolean hasComputedTilesInViewport(){
+    return mLastStateSnapshot != null;
   }
 
   /**
@@ -65,7 +69,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
    * @return List of Tile instances describing the currently visible viewport.
    */
   public Set<Tile> getVisibleTilesFromLastViewportComputation() {
-    if( mLastStateSnapshot == null ) {
+    if( !hasComputedTilesInViewport() ) {
       throw new StateNotComputedException();
     }
     return mTilesVisibleInViewport;

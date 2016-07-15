@@ -26,6 +26,7 @@ public class DetailLevelManager {
 
   private Rect mViewport = new Rect();
   private Rect mComputedViewport = new Rect();
+  private Rect mComputedScaledViewport = new Rect();
 
   private DetailLevel mCurrentDetailLevel;
 
@@ -99,6 +100,16 @@ public class DetailLevelManager {
 
   public Rect getComputedViewport() {
     return mComputedViewport;
+  }
+
+  public Rect getComputedScaledViewport(float scale){
+    mComputedScaledViewport.set(
+      (int) (mComputedViewport.left * scale),
+      (int) (mComputedViewport.top * scale),
+      (int) (mComputedViewport.right * scale),
+      (int) (mComputedViewport.bottom * scale)
+    );
+    return mComputedScaledViewport;
   }
 
   /**

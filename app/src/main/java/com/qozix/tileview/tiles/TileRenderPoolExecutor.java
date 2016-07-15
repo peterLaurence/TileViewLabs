@@ -5,6 +5,7 @@ import android.content.Context;
 import com.qozix.tileview.graphics.BitmapProvider;
 
 import java.lang.ref.WeakReference;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -23,6 +24,8 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
 
   private TileRenderHandler mHandler = new TileRenderHandler();
 
+  private Set<Tile> mRenderSetCopy = new HashSet<>();
+
   public TileRenderPoolExecutor() {
     super(
       INITIAL_POOL_SIZE,
@@ -34,6 +37,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
   }
 
   public void queue( TileCanvasViewGroup tileCanvasViewGroup, Set<Tile> renderSet ) {
+    mRenderSetCopy.addAll( renderSet );
     mTileCanvasViewGroupWeakReference = new WeakReference<>( tileCanvasViewGroup );
     mHandler.setTileCanvasViewGroup( tileCanvasViewGroup );
     final Context context = tileCanvasViewGroup.getContext();
@@ -49,15 +53,15 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
         if( tile == null ) {
           continue;
         }
-        if( renderSet.contains( tile ) ) {
-          renderSet.remove( tile );
+        if( mRenderSetCopy.contains( tile ) ) {
+          mRenderSetCopy.remove( tile );
         } else {
           tileRenderRunnable.cancel( true );
           remove( tileRenderRunnable );
         }
       }
     }
-    for( Tile tile : renderSet ) {
+    for( Tile tile : mRenderSetCopy ) {
       if( isShutdownOrTerminating() ) {
         return;
       }
@@ -72,6 +76,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
       execute( runnable );
       tile.setState( Tile.State.PENDING_DECODE );
     }
+    mRenderSetCopy.clear();
   }
 
   private void broadcastCancel() {

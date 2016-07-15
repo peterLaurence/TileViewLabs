@@ -268,4 +268,8 @@ public class Tile {
     return false;
   }
 
+  public String toShortString(){
+    return getColumn() + ":" + getRow();
+  }
+
 }

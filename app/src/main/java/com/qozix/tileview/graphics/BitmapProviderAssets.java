@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.util.Log;
 
 import com.qozix.tileview.tiles.Tile;
 
@@ -38,10 +39,12 @@ public class BitmapProviderAssets implements BitmapProvider {
           try {
             return BitmapFactory.decodeStream( inputStream, null, OPTIONS );
           } catch( OutOfMemoryError | Exception e ) {
+            Log.d(getClass().getSimpleName(), "OOME");
             // this is probably an out of memory error - you can try sleeping (this method won't be called in the UI thread) or try again (or give up)
           }
         }
       } catch( Exception e ) {
+        Log.d(getClass().getSimpleName(), "for " + tile.getColumn() + ":" + tile.getRow() );
         // this is probably an IOException, meaning the file can't be found
       }
     }
