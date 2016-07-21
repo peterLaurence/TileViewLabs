@@ -54,6 +54,9 @@ public class TileCanvasViewGroup extends View {
 
   private Region mFullyOpaqueRegion = new Region();
 
+  private Set<Tile> mTilesToDraw = new HashSet<>();
+  private Set<Tile> mPreviousLevelDrawnTiles = new HashSet<>();
+
   public TileCanvasViewGroup( Context context ) {
     super( context );
     setWillNotDraw( false );
@@ -315,6 +318,7 @@ public class TileCanvasViewGroup extends View {
     tile.setTransitionsEnabled( mTransitionsEnabled );
     tile.setTransitionDuration( mTransitionDuration );
     tile.stampTime();
+    mTilesToDraw.add( tile );
     invalidate();
   }
 
