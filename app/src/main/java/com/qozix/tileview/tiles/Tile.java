@@ -43,8 +43,8 @@ public class Tile {
 
   private Rect mIntrinsicRect = new Rect();
   private Rect mBaseRect = new Rect();
+  private Rect mRelativeRect = new Rect();
   private Rect mScaledRect = new Rect();
-  private Rect mUnscaledRect = new Rect();
 
   public double renderTimestamp;
 
@@ -69,19 +69,14 @@ public class Tile {
     mDetailLevel = detailLevel;
     mDetailLevelScale = mDetailLevel.getScale();
     mIntrinsicRect.set( 0, 0, mWidth, mHeight );
-    mBaseRect.set( mLeft, mTop, mRight, mBottom );
-    mScaledRect.set(
-      (int) (mLeft * mDetailLevelScale),
-      (int) (mTop * mDetailLevelScale),
-      (int) (mRight * mDetailLevelScale),
-      (int) (mBottom * mDetailLevelScale)
-    );
-    mUnscaledRect.set(  // TODO: maybe RectF and round at final computation - to avoid 1.51 + 1.51 + 1.51 - 1.99
+    mBaseRect.set( mLeft, mTop, mRight, mBottom );  // TODO: need this?
+    mRelativeRect.set(
       FloatMathHelper.unscale( mLeft, mDetailLevelScale ),
       FloatMathHelper.unscale( mTop, mDetailLevelScale ),
       FloatMathHelper.unscale( mRight, mDetailLevelScale ),
       FloatMathHelper.unscale( mBottom, mDetailLevelScale )
     );
+    mScaledRect.set( mRelativeRect );
   }
 
   public int getWidth() {
@@ -124,12 +119,14 @@ public class Tile {
     return mBaseRect;
   }
 
-  public Rect getScaledRect() {
+  public Rect getScaledRect( float scale ) {
+    mScaledRect.set(
+      (int) (mRelativeRect.left * scale),
+      (int) (mRelativeRect.top * scale),
+      (int) (mRelativeRect.right * scale),
+      (int) (mRelativeRect.bottom * scale)
+    );
     return mScaledRect;
-  }
-
-  public Rect getUnscaledRect() {
-    return mUnscaledRect;
   }
 
   public void setTransitionDuration( int transitionDuration ) {
@@ -220,7 +217,7 @@ public class Tile {
    */
   boolean draw( Canvas canvas ) {  // TODO: this might squish edge images
     if( mBitmap != null ) {
-      canvas.drawBitmap( mBitmap, mIntrinsicRect, mUnscaledRect, getPaint() );
+      canvas.drawBitmap( mBitmap, mIntrinsicRect, mRelativeRect, getPaint() );
     }
     return getIsDirty();
   }

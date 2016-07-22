@@ -195,17 +195,17 @@ public class TileCanvasViewGroup extends View {
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
-        mFullyOpaqueRegion.op( tile.getUnscaledRect(), Region.Op.UNION );
+        mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );
       }
     }
-    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedScaledViewport( mScale );
+    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
     Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
     Log.d( getClass().getSimpleName(), "viewport=" + computedViewport.toShortString());
     Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
     Iterator<Tile> tilesFromLastDetailLevelIterator = mPreviousLevelDrawnTiles.iterator();
     while( tilesFromLastDetailLevelIterator.hasNext() ) {
       Tile tile = tilesFromLastDetailLevelIterator.next();
-      Rect rect = tile.getBaseRect();
+      Rect rect = tile.getScaledRect( mScale );
       Log.d( getClass().getSimpleName(), "rect=" + rect.toShortString());
       boolean isInViewport = Rect.intersects( computedViewport, rect );
       boolean isUnderNewTiles = mFullyOpaqueRegion.contains( rect.left, rect.top ) && mFullyOpaqueRegion.contains( rect.right, rect.bottom );
