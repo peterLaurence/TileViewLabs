@@ -6,6 +6,7 @@ import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 import android.view.View;
 
 import com.qozix.tileview.detail.DetailLevel;
@@ -159,7 +160,6 @@ public class TileCanvasViewGroup extends View {
   }
 
 
-
   public boolean getIsRendering() {
     return mIsRendering;
   }
@@ -183,13 +183,18 @@ public class TileCanvasViewGroup extends View {
    * @param canvas The Canvas instance to draw tile bitmaps into.
    */
   private void drawTiles( Canvas canvas ) {
+    boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
-      if( tile.getState() == Tile.State.DECODED && Rect.intersects( mDrawingRect, tile.getScaledRect() ) ) {  // TODO: pass this to Tile.draw?
+      if( tile.getState() == Tile.State.DECODED ) {  // TODO: pass this to Tile.draw?
         boolean dirty = tile.draw( canvas );
+        shouldInvalidate = shouldInvalidate || dirty;
         if( dirty ) {
           // TODO:
         }
       }
+    }
+    if(shouldInvalidate){
+      invalidate();
     }
   }
 
@@ -237,7 +242,8 @@ public class TileCanvasViewGroup extends View {
     // these tiles are mathematically within the current viewport, and should be already computed
     try {
       recentlyComputedVisibleTileSet = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
-    } catch( IllegalStateException e ) {
+    } catch( DetailLevel.StateNotComputedException e ) {
+      Log.d("TCVG", "caught");
       return;
     }
     // use an iterator to avoid concurrent modification
