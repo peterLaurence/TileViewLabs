@@ -4,7 +4,6 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Process;
-import android.util.Log;
 
 import com.qozix.tileview.graphics.BitmapProvider;
 
@@ -120,7 +119,6 @@ class TileRenderRunnable implements Runnable {
     }
     if( mCancelled || tile.getBitmap() == null || mThread.isInterrupted() ) {
       tile.destroy( true );
-      tile.reset();
       return TileRenderHandler.Status.INCOMPLETE;
     }
     return TileRenderHandler.Status.COMPLETE;
@@ -131,9 +129,6 @@ class TileRenderRunnable implements Runnable {
     mThread = Thread.currentThread();
     TileRenderHandler.Status status = renderTile();
     if( status == TileRenderHandler.Status.INCOMPLETE ) {
-      if( getTile() != null) {
-        Log.d(getClass().getSimpleName(), "tile incomplete " + getTile().toShortString());
-      }
       return;
     }
     if( status == TileRenderHandler.Status.COMPLETE ) {

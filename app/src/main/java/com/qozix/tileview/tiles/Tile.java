@@ -43,7 +43,6 @@ public class Tile {
 
   private Rect mIntrinsicRect = new Rect();
   private Rect mScaledRect = new Rect();
-  private Rect mRescaledRect = new Rect();
 
   public double renderTimestamp;
 
@@ -52,8 +51,6 @@ public class Tile {
   private int mTransitionDuration = DEFAULT_TRANSITION_DURATION;
 
   private Paint mPaint;
-
-  private float mOpacity = 1;
 
   private DetailLevel mDetailLevel;
 
@@ -118,16 +115,6 @@ public class Tile {
     return mScaledRect;
   }
 
-  public Rect getRescaledRect( float scale ){
-    mRescaledRect.set(
-      (int) (mScaledRect.left * scale),
-      (int) (mScaledRect.top * scale),
-      (int) (mScaledRect.right * scale),
-      (int) (mScaledRect.bottom * scale)
-    );
-    return mRescaledRect;
-  }
-
   public void setTransitionDuration( int transitionDuration ) {
     mTransitionDuration = transitionDuration;
   }
@@ -140,38 +127,6 @@ public class Tile {
     mState = state;
   }
 
-  public float getOpacity(){
-    return mOpacity;
-  }
-
-  public void setOpacity(float opacity){
-    mOpacity = opacity;
-    if(mOpacity < 1f){
-      if(mPaint == null){
-        mPaint = new Paint();
-      }
-      mPaint.setAlpha( (int) (255 * mOpacity) );
-    }
-  }
-
-  public float getComputedProgress(){
-    if( !mTransitionsEnabled ) {
-      return 1;
-    }
-    double now = AnimationUtils.currentAnimationTimeMillis();
-    double elapsed = now - renderTimestamp;
-    float progress = (float) Math.min( 1, elapsed / mTransitionDuration );
-    if( progress == 1 ) {
-      mTransitionsEnabled = false;
-    }
-    return progress;
-  }
-
-  public boolean composeWithOpacity(){
-    float progress = getComputedProgress();
-    setOpacity( progress );
-    return progress < 1f;
-  }
 
   public void stampTime() {
     renderTimestamp = AnimationUtils.currentAnimationTimeMillis();
@@ -203,8 +158,13 @@ public class Tile {
       return false;
     }
     if( getRendered() < 1f ) {
+      mHasReportedDirtyAtFullOpacity = false;
       return true;
     }
+    if( mHasReportedDirtyAtFullOpacity ) {
+      return false;
+    }
+    mHasReportedDirtyAtFullOpacity = true;
     return true;
   }
 
@@ -215,6 +175,9 @@ public class Tile {
     if( mPaint == null ) {
       mPaint = new Paint();
     }
+    float rendered = getRendered();
+    int opacity = (int) (rendered * 255);
+    mPaint.setAlpha( opacity );
     return mPaint;
   }
 
@@ -226,16 +189,12 @@ public class Tile {
     mState = State.DECODED;
   }
 
-  public void destroy( boolean shouldRecycle ) {
+  void destroy( boolean shouldRecycle ) {
     mState = State.DESTROYED;
     if( shouldRecycle && mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();
     }
     mBitmap = null;
-  }
-
-  public void reset(){
-    mState = State.UNASSIGNED;
   }
 
   /**
@@ -270,10 +229,6 @@ public class Tile {
         && m.getDetailLevel().getScale() == getDetailLevel().getScale();
     }
     return false;
-  }
-
-  public String toShortString(){
-    return getColumn() + ":" + getRow();
   }
 
 }

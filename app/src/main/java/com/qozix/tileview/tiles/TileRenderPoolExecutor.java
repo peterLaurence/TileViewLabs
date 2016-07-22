@@ -5,7 +5,6 @@ import android.content.Context;
 import com.qozix.tileview.graphics.BitmapProvider;
 
 import java.lang.ref.WeakReference;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -24,8 +23,6 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
 
   private TileRenderHandler mHandler = new TileRenderHandler();
 
-  private Set<Tile> mTilesToQueueForRender = new HashSet<>();
-
   public TileRenderPoolExecutor() {
     super(
       INITIAL_POOL_SIZE,
@@ -37,7 +34,6 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
   }
 
   public void queue( TileCanvasViewGroup tileCanvasViewGroup, Set<Tile> renderSet ) {
-    mTilesToQueueForRender.addAll( renderSet );
     mTileCanvasViewGroupWeakReference = new WeakReference<>( tileCanvasViewGroup );
     mHandler.setTileCanvasViewGroup( tileCanvasViewGroup );
     final Context context = tileCanvasViewGroup.getContext();
@@ -53,23 +49,17 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
         if( tile == null ) {
           continue;
         }
-        if( tile.getState() == Tile.State.DESTROYED ) {
-          tile.reset();
-        }
-        if( mTilesToQueueForRender.contains( tile ) ) {
-          mTilesToQueueForRender.remove( tile );
+        if( renderSet.contains( tile ) ) {
+          renderSet.remove( tile );
         } else {
           tileRenderRunnable.cancel( true );
           remove( tileRenderRunnable );
         }
       }
     }
-    for( Tile tile : mTilesToQueueForRender ) {
+    for( Tile tile : renderSet ) {
       if( isShutdownOrTerminating() ) {
         return;
-      }
-      if( tile.getState() == Tile.State.DESTROYED ) {
-        tile.reset();
       }
       if( tile.getState() != Tile.State.UNASSIGNED ) {
         continue;
@@ -82,7 +72,6 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
       execute( runnable );
       tile.setState( Tile.State.PENDING_DECODE );
     }
-    mTilesToQueueForRender.clear();
   }
 
   private void broadcastCancel() {

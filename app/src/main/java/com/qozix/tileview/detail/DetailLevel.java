@@ -2,7 +2,6 @@ package com.qozix.tileview.detail;
 
 import android.graphics.Rect;
 import android.support.annotation.NonNull;
-import android.util.Log;
 
 import com.qozix.tileview.tiles.Tile;
 
@@ -30,22 +29,18 @@ public class DetailLevel implements Comparable<DetailLevel> {
     mTileHeight = tileHeight;
   }
 
-  public DetailLevelManager getDetailLevelManager() {
-    return mDetailLevelManager;
-  }
-
   /**
    * Returns true if there has been a change, false otherwise.
    *
    * @return True if there has been a change, false otherwise.
    */
-  public StateSnapshot computeCurrentState() {
+  public boolean computeCurrentState() {
     float relativeScale = getRelativeScale();
     int drawableWidth = mDetailLevelManager.getScaledWidth();
     int drawableHeight = mDetailLevelManager.getScaledHeight();
     float offsetWidth = mTileWidth * relativeScale;
     float offsetHeight = mTileHeight * relativeScale;
-    Rect viewport = new Rect( mDetailLevelManager.getComputedViewport() ); // TODO: set
+    Rect viewport = new Rect( mDetailLevelManager.getComputedViewport() );
     viewport.top = Math.max( viewport.top, 0 );
     viewport.left = Math.max( viewport.left, 0 );
     viewport.right = Math.min( viewport.right, drawableWidth );
@@ -54,48 +49,32 @@ public class DetailLevel implements Comparable<DetailLevel> {
     int rowEnd = (int) Math.ceil( viewport.bottom / offsetHeight );
     int columnStart = (int) Math.floor( viewport.left / offsetWidth );
     int columnEnd = (int) Math.ceil( viewport.right / offsetWidth );
-    mLastStateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );  // TODO: set
-    return mLastStateSnapshot;
+    StateSnapshot stateSnapshot = new StateSnapshot( this, rowStart, rowEnd, columnStart, columnEnd );
+    boolean sameState = stateSnapshot.equals( mLastStateSnapshot );
+    mLastStateSnapshot = stateSnapshot;
+    return !sameState;
   }
 
-  public boolean hasComputedState() {
-    return mLastStateSnapshot != null;
+  /**
+   * Returns a list of Tile instances describing the currently visible viewport.
+   *
+   * @return List of Tile instances describing the currently visible viewport.
+   */
+  public Set<Tile> getVisibleTilesFromLastViewportComputation() {
+    if( mLastStateSnapshot == null ) {
+      throw new StateNotComputedException();
+    }
+    return mTilesVisibleInViewport;
   }
 
   public void computeVisibleTilesFromViewport() {
-    if( !hasComputedState() ) {
-      Log.d( getClass().getSimpleName(), "need state before computing tiles" );
-      return;
-    }
-    int startSize = mTilesVisibleInViewport.size();
-    /*
-    Iterator<Tile> visibleTileIterator = mTilesVisibleInViewport.iterator();
-    while( visibleTileIterator.hasNext() ) {
-      Tile tile = visibleTileIterator.next();
-      if( !mLastStateSnapshot.contains( tile ) ) {
-        tile.destroy( true );  // TODO:
-        tile.reset();
-      }
-      // separate block since it might have been destroyed elsewhere
-      if( tile.getState() == Tile.State.DESTROYED ) {
-        visibleTileIterator.remove();
-      }
-    }
-    */
     mTilesVisibleInViewport.clear();
-    Log.d( getClass().getSimpleName(), "should be adding from " + mLastStateSnapshot.columnStart + ":" + mLastStateSnapshot.rowStart +
-      " through " + mLastStateSnapshot.columnEnd + ":" + mLastStateSnapshot.columnStart);
     for( int rowCurrent = mLastStateSnapshot.rowStart; rowCurrent < mLastStateSnapshot.rowEnd; rowCurrent++ ) {
       for( int columnCurrent = mLastStateSnapshot.columnStart; columnCurrent < mLastStateSnapshot.columnEnd; columnCurrent++ ) {
         Tile tile = new Tile( columnCurrent, rowCurrent, mTileWidth, mTileHeight, mData, this );
         mTilesVisibleInViewport.add( tile );
       }
     }
-    Log.d( getClass().getSimpleName(), "DetailLevel added " + (mTilesVisibleInViewport.size() - startSize) + " tiles" );
-  }
-
-  public Set<Tile> getTilesVisibleInViewport() {
-    return mTilesVisibleInViewport;
   }
 
   /**
@@ -156,7 +135,7 @@ public class DetailLevel implements Comparable<DetailLevel> {
     }
   }
 
-  public static class StateSnapshot {
+  private static class StateSnapshot {
     public int rowStart;
     public int rowEnd;
     public int columnStart;
@@ -171,19 +150,9 @@ public class DetailLevel implements Comparable<DetailLevel> {
       this.columnEnd = columnEnd;
     }
 
-    public boolean contains( Tile tile ) {
-      return tile.getColumn() >= columnStart
-        && tile.getColumn() <= columnEnd
-        && tile.getRow() >= rowStart
-        && tile.getRow() <= rowEnd;
-    }
-
     public boolean equals( Object o ) {
       if( o == this ) {
         return true;
-      }
-      if( o == null ) {
-        return false;
       }
       if( o instanceof StateSnapshot ) {
         StateSnapshot stateSnapshot = (StateSnapshot) o;
