@@ -24,7 +24,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
 
   private TileRenderHandler mHandler = new TileRenderHandler();
 
-  private Set<Tile> mRenderSetCopy = new HashSet<>();
+  private Set<Tile> mTilesToQueueForRender = new HashSet<>();
 
   public TileRenderPoolExecutor() {
     super(
@@ -37,7 +37,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
   }
 
   public void queue( TileCanvasViewGroup tileCanvasViewGroup, Set<Tile> renderSet ) {
-    mRenderSetCopy.addAll( renderSet );
+    mTilesToQueueForRender.addAll( renderSet );
     mTileCanvasViewGroupWeakReference = new WeakReference<>( tileCanvasViewGroup );
     mHandler.setTileCanvasViewGroup( tileCanvasViewGroup );
     final Context context = tileCanvasViewGroup.getContext();
@@ -53,17 +53,23 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
         if( tile == null ) {
           continue;
         }
-        if( mRenderSetCopy.contains( tile ) ) {
-          mRenderSetCopy.remove( tile );
+        if( tile.getState() == Tile.State.DESTROYED ) {
+          tile.reset();
+        }
+        if( mTilesToQueueForRender.contains( tile ) ) {
+          mTilesToQueueForRender.remove( tile );
         } else {
           tileRenderRunnable.cancel( true );
           remove( tileRenderRunnable );
         }
       }
     }
-    for( Tile tile : mRenderSetCopy ) {
+    for( Tile tile : mTilesToQueueForRender ) {
       if( isShutdownOrTerminating() ) {
         return;
+      }
+      if( tile.getState() == Tile.State.DESTROYED ) {
+        tile.reset();
       }
       if( tile.getState() != Tile.State.UNASSIGNED ) {
         continue;
@@ -76,7 +82,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
       execute( runnable );
       tile.setState( Tile.State.PENDING_DECODE );
     }
-    mRenderSetCopy.clear();
+    mTilesToQueueForRender.clear();
   }
 
   private void broadcastCancel() {

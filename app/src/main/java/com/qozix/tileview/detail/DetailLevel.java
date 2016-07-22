@@ -7,7 +7,6 @@ import android.util.Log;
 import com.qozix.tileview.tiles.Tile;
 
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 
 public class DetailLevel implements Comparable<DetailLevel> {
@@ -63,41 +62,36 @@ public class DetailLevel implements Comparable<DetailLevel> {
     return mLastStateSnapshot != null;
   }
 
-  /**
-   * Returns a list of Tile instances describing the currently visible viewport.
-   *
-   * @return List of Tile instances describing the currently visible viewport.
-   */
-  public Set<Tile> getVisibleTilesFromLastViewportComputation() {
-    if( !hasComputedState() ) {
-      throw new StateNotComputedException();
-    }
-    return mTilesVisibleInViewport;
-  }
-
   public void computeVisibleTilesFromViewport() {
     if( !hasComputedState() ) {
       Log.d( getClass().getSimpleName(), "need state before computing tiles" );
       return;
     }
+    int startSize = mTilesVisibleInViewport.size();
+    /*
     Iterator<Tile> visibleTileIterator = mTilesVisibleInViewport.iterator();
     while( visibleTileIterator.hasNext() ) {
       Tile tile = visibleTileIterator.next();
       if( !mLastStateSnapshot.contains( tile ) ) {
         tile.destroy( true );  // TODO:
+        tile.reset();
       }
       // separate block since it might have been destroyed elsewhere
       if( tile.getState() == Tile.State.DESTROYED ) {
         visibleTileIterator.remove();
       }
     }
+    */
+    mTilesVisibleInViewport.clear();
+    Log.d( getClass().getSimpleName(), "should be adding from " + mLastStateSnapshot.columnStart + ":" + mLastStateSnapshot.rowStart +
+      " through " + mLastStateSnapshot.columnEnd + ":" + mLastStateSnapshot.columnStart);
     for( int rowCurrent = mLastStateSnapshot.rowStart; rowCurrent < mLastStateSnapshot.rowEnd; rowCurrent++ ) {
       for( int columnCurrent = mLastStateSnapshot.columnStart; columnCurrent < mLastStateSnapshot.columnEnd; columnCurrent++ ) {
         Tile tile = new Tile( columnCurrent, rowCurrent, mTileWidth, mTileHeight, mData, this );
         mTilesVisibleInViewport.add( tile );
       }
     }
-
+    Log.d( getClass().getSimpleName(), "DetailLevel added " + (mTilesVisibleInViewport.size() - startSize) + " tiles" );
   }
 
   public Set<Tile> getTilesVisibleInViewport() {

@@ -39,12 +39,12 @@ public class BitmapProviderAssets implements BitmapProvider {
           try {
             return BitmapFactory.decodeStream( inputStream, null, OPTIONS );
           } catch( OutOfMemoryError | Exception e ) {
-            Log.d(getClass().getSimpleName(), "OOME");
+            Log.d(getClass().getSimpleName(), "OOME for " + tile.getColumn() + ":" + tile.getRow() );
             // this is probably an out of memory error - you can try sleeping (this method won't be called in the UI thread) or try again (or give up)
           }
         }
       } catch( Exception e ) {
-        Log.d(getClass().getSimpleName(), "for " + tile.getColumn() + ":" + tile.getRow() );
+        Log.d(getClass().getSimpleName(), "OOME for " + tile.getColumn() + ":" + tile.getRow() );
         // this is probably an IOException, meaning the file can't be found
       }
     }

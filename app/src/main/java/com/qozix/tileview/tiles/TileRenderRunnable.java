@@ -104,9 +104,6 @@ class TileRenderRunnable implements Runnable {
     if( tile == null ) {
       return TileRenderHandler.Status.INCOMPLETE;
     }
-    if( tile.getState() == Tile.State.DESTROYED ){
-      return TileRenderHandler.Status.INCOMPLETE;
-    }
     Context context = getContext();
     if( context == null ) {
       return TileRenderHandler.Status.INCOMPLETE;
@@ -121,8 +118,9 @@ class TileRenderRunnable implements Runnable {
       mThrowable = throwable;
       return TileRenderHandler.Status.ERROR;
     }
-    if( mCancelled || tile.getBitmap() == null || tile.getState() == Tile.State.DESTROYED ||  mThread.isInterrupted() ) {
+    if( mCancelled || tile.getBitmap() == null || mThread.isInterrupted() ) {
       tile.destroy( true );
+      tile.reset();
       return TileRenderHandler.Status.INCOMPLETE;
     }
     return TileRenderHandler.Status.COMPLETE;

@@ -234,6 +234,10 @@ public class Tile {
     mBitmap = null;
   }
 
+  public void reset(){
+    mState = State.UNASSIGNED;
+  }
+
   /**
    * @param canvas The canvas the tile's bitmap should be drawn into
    * @return True if the tile is dirty (drawing output has changed and needs parent validation)

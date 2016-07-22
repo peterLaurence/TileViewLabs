@@ -9,6 +9,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 
 import com.qozix.tileview.detail.DetailLevel;
@@ -62,6 +63,14 @@ public class TileCanvasViewGroup extends View {
     setWillNotDraw( false );
     mTileRenderThrottleHandler = new TileRenderThrottleHandler( this );
     mTileRenderPoolExecutor = new TileRenderPoolExecutor();
+    setOnTouchListener( new OnTouchListener() {
+      @Override
+      public boolean onTouch( View view, MotionEvent motionEvent ) {
+        invalidate();
+        logTileSetWithState( mTilesToDraw );
+        return false;
+      }
+    } );
   }
 
   public void setScale( float factor ) {
@@ -194,13 +203,16 @@ public class TileCanvasViewGroup extends View {
 
   private Set<Tile> mDecodedTilesFromPreviousDetailLevel = new HashSet<>();
   public void updateTileSet( DetailLevel detailLevel ) {
+    log("updateTileSet");
     if( detailLevel == null ) {
+      log("no detail level found, quit");
       return;
     }
     if( detailLevel.equals( mDetailLevelToRender ) ) {
+      log("same detail level, quit");
       return;
     }
-    // if there's a previous level
+    // if there's a previous level, get the tiles that are showing
     if( mDetailLevelToRender != null ) {
 
     }
@@ -223,14 +235,13 @@ public class TileCanvasViewGroup extends View {
       log("no detail level set");
       return;
     }
-
-
-
     // if visible columns and rows are same as previously computed, fast-fail
     DetailLevel.StateSnapshot currentStateSnapshot = mDetailLevelToRender.computeCurrentState();
+    log("detail level should compute: " + mDetailLevelToRender.hasComputedState());
     boolean changed = !currentStateSnapshot.equals( mLastStateSnapshot );  // TODO: maintain compare state here instead?
     if(!changed){
       log("no change in viewport, quit");
+      logTileSet(mTilesToDraw);
       return;
     }
 
@@ -252,29 +263,34 @@ public class TileCanvasViewGroup extends View {
    * This should seldom be necessary, as it's built into beginRenderTask
    */
   public void cleanup() {
-    if( mDetailLevelToRender.hasComputedState() ){
+    log("!!!CLEANUP!!!");
+    if( !mDetailLevelToRender.hasComputedState() ){
+      log("DetailLevel does not have computed state");
       return;
     }
-    Set<Tile> lastKnownVisibleTiles = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
+    Set<Tile> lastKnownVisibleTiles = mDetailLevelToRender.getTilesVisibleInViewport();
     Iterator<Tile> tilesToDrawIterator = mTilesToDraw.iterator();
+    int startSize = mTilesToDraw.size();
     while(tilesToDrawIterator.hasNext()){
       Tile tile = tilesToDrawIterator.next();
       if( !lastKnownVisibleTiles.contains( tile ) ) {
         tile.destroy( mShouldRecycleBitmaps );
+        tile.reset();
         tilesToDrawIterator.remove();
       }
     }
+    log(startSize - mTilesToDraw.size() + " tiles removed");
   }
 
 
   // this tile has been decoded by the time it gets passed here
   void addTileToCanvas( Tile tile ) {
     //log("addTileToCanvas");
-    if( mDetailLevelToRender.hasComputedState() && !mDetailLevelToRender.getVisibleTilesFromLastViewportComputation().contains( tile ) ) {
+    if( mDetailLevelToRender.hasComputedState() && !mDetailLevelToRender.getTilesVisibleInViewport().contains( tile ) ) {
       log("addTileToCanvas, this tile is not in viewport, don't invalidate " + tile.toShortString());
       return;
     }
-    //log("addTileToCanvas, got past contains");
+    //log("addTileToCanvas, got past contains, state=" + tile.getState());
     tile.setTransitionsEnabled( mTransitionsEnabled );
     tile.setTransitionDuration( mTransitionDuration );
     tile.stampTime();
@@ -388,4 +404,16 @@ public class TileCanvasViewGroup extends View {
     }
     Log.d(getClass().getSimpleName(), builder.toString());
   }
+
+  private void logTileSetWithState(Set<Tile> tiles){
+    StringBuilder builder = new StringBuilder();
+    for(Tile tile : tiles){
+      builder.append(tile.toShortString());
+      builder.append(":");
+      builder.append(tile.getState().toString());
+      builder.append(",");
+    }
+    Log.d(getClass().getSimpleName(), builder.toString());
+  }
+
 }
