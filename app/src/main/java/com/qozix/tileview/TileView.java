@@ -813,7 +813,7 @@ public class TileView extends ZoomPanLayout implements
 
   @Override
   public void onZoomBegin( float scale, Origination origin ) {
-    if( !mShouldUpdateDetailLevelWhileZooming ) {
+    if( !mShouldUpdateDetailLevelWhileZooming ) {  // TODO: this might be only appropriate for progammatic zooms...  @peterLaurence what do you think?
       mDetailLevelManager.lockDetailLevel();
     }
     mDetailLevelManager.setScale( scale );

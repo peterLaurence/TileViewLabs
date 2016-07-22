@@ -191,7 +191,7 @@ public class TileCanvasViewGroup extends View {
    */
   private void drawTiles( Canvas canvas ) {
     Log.d( getClass().getSimpleName(), "drawTiles" );
-    mFullyOpaqueRegion.setEmpty();
+
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
@@ -219,6 +219,8 @@ public class TileCanvasViewGroup extends View {
       }
       Log.d( getClass().getSimpleName(), "<" + shouldDrawPreviousTile + "> previous tile at " + tile.toShortString() );
     }
+    mFullyOpaqueRegion.setEmpty();
+    Log.d( getClass().getSimpleName(), "drawing " + mPreviousLevelDrawnTiles.size() + " previous tiles" );
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {  // TODO: pass this to Tile.draw?
         boolean dirty = tile.draw( canvas );
