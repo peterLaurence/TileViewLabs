@@ -160,83 +160,7 @@ public class TileCanvasViewGroup extends View {
     mRenderIsSuppressed = true;
   }
 
-  //TODO:
-  private Rect mDebugRect = new Rect();
-  /**
-   * Draw tile bitmaps into the surface canvas displayed by this View.
-   *
-   * @param canvas The Canvas instance to draw tile bitmaps into.
-   */
-  private void drawTiles( Canvas canvas ) {
-    mFullyOpaqueRegion.setEmpty();
-    for(Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
-      if( tile.getState() == Tile.State.DECODED ) {
-        boolean dirty = tile.composeWithOpacity();
-        if( !dirty ) {
-          mFullyOpaqueRegion.op( tile.getScaledRect(), Region.Op.UNION );
-        }
-      }
-    }
-    Iterator<Tile> tilesFromLastDetailLevelIterator = mDecodedTilesFromPreviousDetailLevel.iterator();
-    while(tilesFromLastDetailLevelIterator.hasNext()){
-      Tile tile = tilesFromLastDetailLevelIterator.next();
-      if( tile.getState() == Tile.State.DECODED ) {
-        Rect rect = tile.getScaledRect();
-        if(mFullyOpaqueRegion.contains(rect.left, rect.top)){
-          if(mFullyOpaqueRegion.contains(rect.right, rect.bottom)){
-            log("previous tiles is beneath fully opaque region, removing " + tile.toShortString());
-            tilesFromLastDetailLevelIterator.remove();
-            continue;
-            // TODO: optimize with quickX methods, maybe flip region?
-          }
-        }
-        log("drawing tile from previous set " + tile.toShortString());
-        tile.composeWithOpacity();
-        tile.draw( canvas );
-      }
-    }
-    // TODO: debug
-    Set<Tile> drawnTiles = new HashSet<>();
-    Set<Tile> undecodedTiles = new HashSet<>();
-    for(Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
-      if( tile.getState() == Tile.State.DECODED ) {
-        tile.draw( canvas );
-        //drawnTiles.add( tile );
-      } else {
-        //undecodedTiles.add( tile );
-      }
-    }
-//    log( "end of drawTiles, these were drawn:");
-//    logTileSet( drawnTiles );
-//    log( "end of drawTiles, we expected these to have been drawn: ");
-//    logTileSet( mTilesInCurrentViewport );
-//    log( "end of drawTiles, these tiles are not decoded:" );
-//    logTileSet( undecodedTiles );
-  }
 
-  private Set<Tile> mDecodedTilesFromPreviousDetailLevel = new HashSet<>();
-  public void updateTileSet( DetailLevel detailLevel ) {
-    if( detailLevel == null ) {
-      return;
-    }
-    if( detailLevel.equals( mDetailLevelToRender ) ) {
-      return;
-    }
-    if( mDetailLevelToRender != null ) {
-      mDecodedTilesFromPreviousDetailLevel.clear();
-      for( Tile tile : mDetailLevelToRender.getTilesVisibleInViewport() ) {
-        if( tile.getState() == Tile.State.DECODED ) {
-          mDecodedTilesFromPreviousDetailLevel.add( tile );
-        }
-      }
-    }
-    log("saving previous tiles, total=" + mDecodedTilesFromPreviousDetailLevel.size());
-    mLastStateSnapshot = null;
-    mDetailLevelToRender = detailLevel;
-    mFullyOpaqueRegion.setEmpty();
-    cancelRender();
-    requestRender();
-  }
 
   public boolean getIsRendering() {
     return mIsRendering;
@@ -255,6 +179,42 @@ public class TileCanvasViewGroup extends View {
     }
   }
 
+  //TODO:
+  private Rect mDebugRect = new Rect();
+  /**
+   * Draw tile bitmaps into the surface canvas displayed by this View.
+   *
+   * @param canvas The Canvas instance to draw tile bitmaps into.
+   */
+  private void drawTiles( Canvas canvas ) {
+    for( Tile tile : mTilesToDraw ) {
+      tile.draw( canvas );
+    }
+  }
+
+  private Set<Tile> mDecodedTilesFromPreviousDetailLevel = new HashSet<>();
+  public void updateTileSet( DetailLevel detailLevel ) {
+    if( detailLevel == null ) {
+      return;
+    }
+    if( detailLevel.equals( mDetailLevelToRender ) ) {
+      return;
+    }
+    // if there's a previous level
+    if( mDetailLevelToRender != null ) {
+
+    }
+    for(Tile tile : mTilesToDraw ) {
+      tile.destroy( mShouldRecycleBitmaps );
+    }
+    mTilesToDraw.clear();
+    mLastStateSnapshot = null;
+    mDetailLevelToRender = detailLevel;
+    mFullyOpaqueRegion.setEmpty();
+    cancelRender();
+    requestRender();
+  }
+
   private DetailLevel.StateSnapshot mLastStateSnapshot;
 
   private void beginRenderTask() {
@@ -264,6 +224,8 @@ public class TileCanvasViewGroup extends View {
       return;
     }
 
+
+
     // if visible columns and rows are same as previously computed, fast-fail
     DetailLevel.StateSnapshot currentStateSnapshot = mDetailLevelToRender.computeCurrentState();
     boolean changed = !currentStateSnapshot.equals( mLastStateSnapshot );  // TODO: maintain compare state here instead?
@@ -271,6 +233,9 @@ public class TileCanvasViewGroup extends View {
       log("no change in viewport, quit");
       return;
     }
+
+    // TODO: cleanup
+
 
     mLastStateSnapshot = currentStateSnapshot;
 
@@ -287,23 +252,18 @@ public class TileCanvasViewGroup extends View {
    * This should seldom be necessary, as it's built into beginRenderTask
    */
   public void cleanup() {
-    log("!!!CLEANUP!!!");
-    Rect currentViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
-    log("currentViewport" + currentViewport.toShortString());
-    Iterator<Tile> tilesInPreviousDetailLevelIterator = mDecodedTilesFromPreviousDetailLevel.iterator();
-    Set<Tile> tilesFromPreviousDetailLevelNoLongerInViewport = new HashSet<>();
-    while(tilesInPreviousDetailLevelIterator.hasNext()){
-      Tile tile = tilesInPreviousDetailLevelIterator.next();
-      if(!Rect.intersects( currentViewport, tile.getScaledRect( ) )){
-        tilesFromPreviousDetailLevelNoLongerInViewport.add( tile );
-        // TODO: problem is here
-        tilesInPreviousDetailLevelIterator.remove();
+    if( mDetailLevelToRender.hasComputedState() ){
+      return;
+    }
+    Set<Tile> lastKnownVisibleTiles = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
+    Iterator<Tile> tilesToDrawIterator = mTilesToDraw.iterator();
+    while(tilesToDrawIterator.hasNext()){
+      Tile tile = tilesToDrawIterator.next();
+      if( !lastKnownVisibleTiles.contains( tile ) ) {
+        tile.destroy( mShouldRecycleBitmaps );
+        tilesToDrawIterator.remove();
       }
     }
-    log( "these tiles are from the previous level and are no longer in viewport:");
-    logTileSet(tilesFromPreviousDetailLevelNoLongerInViewport);
-    log( "these tiles are from the previous level and ARE in the viewport:" );
-    logTileSet( mDecodedTilesFromPreviousDetailLevel );
   }
 
 
