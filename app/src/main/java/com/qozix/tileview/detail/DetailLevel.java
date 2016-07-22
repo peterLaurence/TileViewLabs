@@ -29,6 +29,10 @@ public class DetailLevel implements Comparable<DetailLevel> {
     mTileHeight = tileHeight;
   }
 
+  public DetailLevelManager getDetailLevelManager() {
+    return mDetailLevelManager;
+  }
+
   /**
    * Returns true if there has been a change, false otherwise.
    *

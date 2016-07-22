@@ -3,6 +3,7 @@ package com.qozix.tileview.tiles;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.graphics.Region;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -55,6 +56,7 @@ public class TileCanvasViewGroup extends View {
   private TileRenderPoolExecutor mTileRenderPoolExecutor;
 
   private Set<Tile> mTilesInCurrentViewport = new HashSet<>();
+  private Set<Tile> mPreviousLevelDrawnTiles = new HashSet<>();
 
   public TileCanvasViewGroup( Context context ) {
     super( context );
@@ -136,6 +138,9 @@ public class TileCanvasViewGroup extends View {
     if( mDetailLevelToRender == null ) {
       return;
     }
+    if( mDetailLevelToRender.getDetailLevelManager().getIsLocked() ) {
+      return;
+    }
     if( !mTileRenderThrottleHandler.hasMessages( RENDER_FLAG ) ) {
       mTileRenderThrottleHandler.sendEmptyMessageDelayed( RENDER_FLAG, mRenderBuffer );
     }
@@ -177,13 +182,43 @@ public class TileCanvasViewGroup extends View {
     }
   }
 
+  private Region mFullyOpaqueRegion = new Region();
+
   /**
    * Draw tile bitmaps into the surface canvas displayed by this View.
    *
    * @param canvas The Canvas instance to draw tile bitmaps into.
    */
   private void drawTiles( Canvas canvas ) {
+    Log.d( getClass().getSimpleName(), "drawTiles" );
+    mFullyOpaqueRegion.setEmpty();
     boolean shouldInvalidate = false;
+    for( Tile tile : mTilesInCurrentViewport ) {
+      if( tile.getState() == Tile.State.DECODED ) {
+        mFullyOpaqueRegion.op( tile.getUnscaledRect(), Region.Op.UNION );
+      }
+    }
+    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedScaledViewport( mScale );
+    Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
+    Log.d( getClass().getSimpleName(), "viewport=" + computedViewport.toShortString());
+    Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
+    Iterator<Tile> tilesFromLastDetailLevelIterator = mPreviousLevelDrawnTiles.iterator();
+    while( tilesFromLastDetailLevelIterator.hasNext() ) {
+      Tile tile = tilesFromLastDetailLevelIterator.next();
+      Rect rect = tile.getBaseRect();
+      Log.d( getClass().getSimpleName(), "rect=" + rect.toShortString());
+      boolean isInViewport = Rect.intersects( computedViewport, rect );
+      boolean isUnderNewTiles = mFullyOpaqueRegion.contains( rect.left, rect.top ) && mFullyOpaqueRegion.contains( rect.right, rect.bottom );
+      boolean shouldDrawPreviousTile = isInViewport && !isUnderNewTiles;
+      Log.d( getClass().getSimpleName(), "isInViewport? " + isInViewport + ", isUnderNewTiles? " + isUnderNewTiles);
+      if( shouldDrawPreviousTile ) {
+        boolean dirty = tile.draw( canvas );
+        shouldInvalidate = shouldInvalidate || dirty;
+      } else {
+        tilesFromLastDetailLevelIterator.remove();
+      }
+      Log.d( getClass().getSimpleName(), "<" + shouldDrawPreviousTile + "> previous tile at " + tile.toShortString() );
+    }
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {  // TODO: pass this to Tile.draw?
         boolean dirty = tile.draw( canvas );
@@ -193,22 +228,27 @@ public class TileCanvasViewGroup extends View {
         }
       }
     }
-    if(shouldInvalidate){
+    if( shouldInvalidate ) {
       invalidate();
     }
   }
 
   public void updateTileSet( DetailLevel detailLevel ) {  // TODO: need this?
-    mDetailLevelToRender = detailLevel;
-    if( mDetailLevelToRender == null ) {
+    if( detailLevel == null ) {
       return;
     }
-    if( mDetailLevelToRender.equals( mLastRequestedDetailLevel ) ) {
+    if( detailLevel.equals( mDetailLevelToRender ) ) {
       return;
     }
-    mLastRequestedDetailLevel = mDetailLevelToRender;
-    mTilesInCurrentViewport.clear();
     cancelRender();
+    mPreviousLevelDrawnTiles.clear();
+    for( Tile tile : mTilesInCurrentViewport ) {
+      if( tile.getState() == Tile.State.DECODED ) {
+        mPreviousLevelDrawnTiles.add( tile );
+      }
+    }
+    mTilesInCurrentViewport.clear();
+    mDetailLevelToRender = detailLevel;
     requestRender();
   }
 
@@ -243,7 +283,7 @@ public class TileCanvasViewGroup extends View {
     try {
       recentlyComputedVisibleTileSet = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
     } catch( DetailLevel.StateNotComputedException e ) {
-      Log.d("TCVG", "caught");
+      Log.d( "TCVG", "caught" );
       return;
     }
     // use an iterator to avoid concurrent modification
@@ -365,4 +405,15 @@ public class TileCanvasViewGroup extends View {
       requestRender();
     }
   };
+
+  // TODO: debug
+  private void logTileSet( Set<Tile> tiles ) {
+    StringBuilder builder = new StringBuilder();
+    for( Tile tile : tiles ) {
+      builder.append( tile.toShortString() );
+      builder.append( "," );
+    }
+    String output = builder.toString();
+    Log.d( getClass().getSimpleName(), output );
+  }
 }

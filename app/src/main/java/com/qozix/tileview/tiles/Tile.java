@@ -42,7 +42,9 @@ public class Tile {
   private Bitmap mBitmap;
 
   private Rect mIntrinsicRect = new Rect();
+  private Rect mBaseRect = new Rect();
   private Rect mScaledRect = new Rect();
+  private Rect mUnscaledRect = new Rect();
 
   public double renderTimestamp;
 
@@ -67,7 +69,14 @@ public class Tile {
     mDetailLevel = detailLevel;
     mDetailLevelScale = mDetailLevel.getScale();
     mIntrinsicRect.set( 0, 0, mWidth, mHeight );
-    mScaledRect.set(  // TODO: maybe RectF and round at final computation - to avoid 1.51 + 1.51 + 1.51 - 1.99
+    mBaseRect.set( mLeft, mTop, mRight, mBottom );
+    mScaledRect.set(
+      (int) (mLeft * mDetailLevelScale),
+      (int) (mTop * mDetailLevelScale),
+      (int) (mRight * mDetailLevelScale),
+      (int) (mBottom * mDetailLevelScale)
+    );
+    mUnscaledRect.set(  // TODO: maybe RectF and round at final computation - to avoid 1.51 + 1.51 + 1.51 - 1.99
       FloatMathHelper.unscale( mLeft, mDetailLevelScale ),
       FloatMathHelper.unscale( mTop, mDetailLevelScale ),
       FloatMathHelper.unscale( mRight, mDetailLevelScale ),
@@ -111,8 +120,16 @@ public class Tile {
     return mBitmap != null;
   }
 
+  public Rect getBaseRect() {
+    return mBaseRect;
+  }
+
   public Rect getScaledRect() {
     return mScaledRect;
+  }
+
+  public Rect getUnscaledRect() {
+    return mUnscaledRect;
   }
 
   public void setTransitionDuration( int transitionDuration ) {
@@ -203,7 +220,7 @@ public class Tile {
    */
   boolean draw( Canvas canvas ) {  // TODO: this might squish edge images
     if( mBitmap != null ) {
-      canvas.drawBitmap( mBitmap, mIntrinsicRect, mScaledRect, getPaint() );
+      canvas.drawBitmap( mBitmap, mIntrinsicRect, mUnscaledRect, getPaint() );
     }
     return getIsDirty();
   }
@@ -229,6 +246,10 @@ public class Tile {
         && m.getDetailLevel().getScale() == getDetailLevel().getScale();
     }
     return false;
+  }
+
+  public String toShortString(){
+    return mColumn + ":" + mRow;
   }
 
 }

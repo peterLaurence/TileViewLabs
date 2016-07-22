@@ -129,6 +129,10 @@ public class DetailLevelManager {
     mDetailLevelLocked = false;
   }
 
+  public boolean getIsLocked() {
+    return mDetailLevelLocked;
+  }
+
   public void resetDetailLevels() {
     mDetailLevelLinkedList.clear();
     update();
