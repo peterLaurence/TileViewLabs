@@ -184,6 +184,8 @@ public class TileCanvasViewGroup extends View {
   }
 
   private Region mFullyOpaqueRegion = new Region();
+  private boolean mHasInvalidatedOnCleanOnce;
+  private boolean mHasInvalidatedAfterPreviousTiledCleared;
 
   /**
    * Draw tile bitmaps into the surface canvas displayed by this View.
@@ -196,7 +198,7 @@ public class TileCanvasViewGroup extends View {
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
-        tile.composeWithOpacity();
+        tile.computeProgress();
         mDecodedTilesInCurrentViewport.add( tile );
         if(tile.getIsDirty()){
           shouldInvalidate = true;
@@ -234,7 +236,33 @@ public class TileCanvasViewGroup extends View {
     }
     mDecodedTilesInCurrentViewport.clear();
     if( shouldInvalidate ) {
+      Log.d( getClass().getSimpleName(), "there's more work to do, partially opaque tiles were drawn" );
+      mHasInvalidatedOnCleanOnce = false;
+      mHasInvalidatedAfterPreviousTiledCleared = false;
       invalidate();
+    } else {
+      Log.d( getClass().getSimpleName(), "if all tiles were fully opaque, we need another pass to clear our tiles from last level" );
+      if(!mHasInvalidatedOnCleanOnce){
+        mHasInvalidatedOnCleanOnce = true;
+        invalidate();
+      } else {
+        Log.d( getClass().getSimpleName(), "this is second pass after a clean draw, do a hard cleanup here" );
+        if( mPreviousLevelDrawnTiles.size() > 0 ) {
+          for (Tile tile : mPreviousLevelDrawnTiles) {
+            tile.destroy(mShouldRecycleBitmaps);
+          }
+          mPreviousLevelDrawnTiles.clear();
+          if (!mHasInvalidatedAfterPreviousTiledCleared) {
+            Log.d(getClass().getSimpleName(), "we did a hard cleanup, invalidate again so we don't draw the previous tiles");
+            mHasInvalidatedAfterPreviousTiledCleared = true;
+            invalidate();
+          } else {
+            Log.d(getClass().getSimpleName(), "should be completely done, don't draw until another explicitly requested (e.g., user interaction)");
+          }
+        } else {
+          Log.d(getClass().getSimpleName(), "there were no previous tiles, so we should be all done");
+        }
+      }
     }
   }
 
@@ -302,19 +330,14 @@ public class TileCanvasViewGroup extends View {
         tilesInCurrentViewportIterator.remove();
       }
     }
-
   }
 
 
   // this tile has been decoded by the time it gets passed here
   void addTileToCanvas( final Tile tile ) {
-    if( !mTilesInCurrentViewport.contains( tile ) ) {
-      return;
+    if( mTilesInCurrentViewport.contains( tile ) ) {
+      invalidate();
     }
-    tile.setTransitionsEnabled( mTransitionsEnabled );
-    tile.setTransitionDuration( mTransitionDuration );
-    tile.stampTime();
-    invalidate();
   }
 
 

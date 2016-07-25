@@ -1,8 +1,6 @@
 package com.qozix.tileview.tiles;
 
-import android.content.Context;
-
-import com.qozix.tileview.graphics.BitmapProvider;
+import android.os.Handler;
 
 import java.lang.ref.WeakReference;
 import java.util.Set;
@@ -36,8 +34,6 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
   public void queue( TileCanvasViewGroup tileCanvasViewGroup, Set<Tile> renderSet ) {
     mTileCanvasViewGroupWeakReference = new WeakReference<>( tileCanvasViewGroup );
     mHandler.setTileCanvasViewGroup( tileCanvasViewGroup );
-    final Context context = tileCanvasViewGroup.getContext();
-    final BitmapProvider bitmapProvider = tileCanvasViewGroup.getBitmapProvider();
     tileCanvasViewGroup.onRenderTaskPreExecute();
     for( Runnable runnable : getQueue() ) {
       if( runnable instanceof TileRenderRunnable ) {
@@ -66,12 +62,21 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
       }
       TileRenderRunnable runnable = new TileRenderRunnable();
       runnable.setTile( tile );
-      runnable.setContext( context );
-      runnable.setBitmapProvider( bitmapProvider );
-      runnable.setHandler( mHandler );
+      runnable.setTileRenderPoolExecutor( this );
       execute( runnable );
       tile.setState( Tile.State.PENDING_DECODE );
     }
+  }
+
+  public Handler getHandler(){
+    return mHandler;
+  }
+
+  public TileCanvasViewGroup getTileCanvasViewGroup(){
+    if( mTileCanvasViewGroupWeakReference == null ) {
+      return null;
+    }
+    return mTileCanvasViewGroupWeakReference.get();
   }
 
   private void broadcastCancel() {

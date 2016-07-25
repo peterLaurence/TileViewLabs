@@ -10,9 +10,16 @@
     android:layout_height="0dp"
     android:layout_weight="1" />
 
-  <View
+  <TextView
     android:layout_width="match_parent"
     android:layout_height="0dp"
-    android:layout_weight="0" />
+    android:layout_weight="1"
+    android:paddingLeft="40dp"
+    android:paddingRight="40dp"
+    android:gravity="center"
+    android:background="#eeeeee"
+    android:textSize="20sp"
+    android:lineSpacingMultiplier="1.3"
+    android:text="This TextView exists just so we can shrink the TileView viewport and get smaller reports.  Ajust the weight to get a larger or smaller TileView."  />
 
 </LinearLayout>

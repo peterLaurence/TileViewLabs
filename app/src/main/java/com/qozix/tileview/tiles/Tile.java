@@ -31,15 +31,12 @@ public class Tile {
   private int mRight;
   private int mBottom;
 
-  private float mProgress = 1f;
-  private float mOpacity;
+  private float mProgress;
 
   private int mRow;
   private int mColumn;
 
   private float mDetailLevelScale;
-
-  private boolean mHasReportedDirtyAtFullOpacity;
 
   private Object mData;
   private Bitmap mBitmap;
@@ -151,23 +148,23 @@ public class Tile {
     double now = AnimationUtils.currentAnimationTimeMillis();
     double elapsed = now - mRenderTimeStamp;
     mProgress = (float) Math.min( 1, elapsed / mTransitionDuration );
-    if( mProgress == 1 ) {
+    //Log.d( getClass().getSimpleName(), "computed progress=" + mProgress);
+    if( mProgress == 1f ) {
       mTransitionsEnabled = false;
     }
   }
 
-  public boolean composeWithOpacity(){
-    computeProgress();
-    return mProgress < 1f;
-  }
-
   public void stampTime() {
-    mRenderTimeStamp = AnimationUtils.currentAnimationTimeMillis();
+    if( mTransitionsEnabled ) {
+      mRenderTimeStamp = AnimationUtils.currentAnimationTimeMillis();
+    }
   }
-
 
   public void setTransitionsEnabled( boolean enabled ) {
     mTransitionsEnabled = enabled;
+    if( enabled ) {
+      mProgress = 0;
+    }
   }
 
   public DetailLevel getDetailLevel() {
@@ -186,15 +183,7 @@ public class Tile {
     if( !mTransitionsEnabled ) {
       return false;
     }
-    if( mProgress < 1f ) {
-      mHasReportedDirtyAtFullOpacity = false;
-      return true;
-    }
-    if( mHasReportedDirtyAtFullOpacity ) {
-      return false;
-    }
-    mHasReportedDirtyAtFullOpacity = true;
-    return true;
+    return mProgress < 1f;
   }
 
   public Paint getPaint() {
@@ -204,7 +193,7 @@ public class Tile {
     if( mPaint == null ) {
       mPaint = new Paint();
     }
-    mPaint.setAlpha( (int) (255 * mOpacity) );
+    mPaint.setAlpha( (int) (255 * mProgress) );
     return mPaint;
   }
 
@@ -222,6 +211,7 @@ public class Tile {
       mBitmap.recycle();
     }
     mBitmap = null;
+    mProgress = 0f;
   }
 
   /**
@@ -231,6 +221,11 @@ public class Tile {
   boolean draw( Canvas canvas ) {  // TODO: this might squish edge images
     if( mBitmap != null ) {
       canvas.drawBitmap( mBitmap, mIntrinsicRect, mRelativeRect, getPaint() );
+      /*
+      Paint paint = getPaint();
+      String message = paint == null ? "paint is null" : "opacity=" + paint.getAlpha();
+      Log.d( getClass().getSimpleName(), message);
+      */
     }
     return getIsDirty();
   }
