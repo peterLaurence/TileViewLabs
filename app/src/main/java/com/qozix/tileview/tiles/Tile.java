@@ -183,6 +183,10 @@ public class Tile {
   }
 
   public boolean getIsDirty() {
+    return mTransitionsEnabled && mProgress < 1f;
+  }
+
+  public boolean getIsDirty2() {
     if( !mTransitionsEnabled ) {
       return false;
     }

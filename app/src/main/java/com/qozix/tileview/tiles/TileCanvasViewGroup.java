@@ -195,7 +195,10 @@ public class TileCanvasViewGroup extends View {
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
-        mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );
+        tile.composeWithOpacity();
+        if(!tile.getIsDirty()) {
+          mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );
+        }
       }
     }
     Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
@@ -225,9 +228,6 @@ public class TileCanvasViewGroup extends View {
       if( tile.getState() == Tile.State.DECODED ) {  // TODO: pass this to Tile.draw?
         boolean dirty = tile.draw( canvas );
         shouldInvalidate = shouldInvalidate || dirty;
-        if( dirty ) {
-          // TODO:
-        }
       }
     }
     if( shouldInvalidate ) {
