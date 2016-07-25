@@ -31,6 +31,9 @@ public class Tile {
   private int mRight;
   private int mBottom;
 
+  private float mProgress = 1f;
+  private float mOpacity;
+
   private int mRow;
   private int mColumn;
 
@@ -46,7 +49,7 @@ public class Tile {
   private Rect mRelativeRect = new Rect();
   private Rect mScaledRect = new Rect();
 
-  public double renderTimestamp;
+  public double mRenderTimeStamp;
 
   private boolean mTransitionsEnabled;
 
@@ -141,10 +144,27 @@ public class Tile {
     mState = state;
   }
 
+  public void computeProgress(){
+    if( !mTransitionsEnabled ) {
+      return;
+    }
+    double now = AnimationUtils.currentAnimationTimeMillis();
+    double elapsed = now - mRenderTimeStamp;
+    mProgress = (float) Math.min( 1, elapsed / mTransitionDuration );
+    if( mProgress == 1 ) {
+      mTransitionsEnabled = false;
+    }
+  }
+
+  public boolean composeWithOpacity(){
+    computeProgress();
+    return mProgress < 1f;
+  }
 
   public void stampTime() {
-    renderTimestamp = AnimationUtils.currentAnimationTimeMillis();
+    mRenderTimeStamp = AnimationUtils.currentAnimationTimeMillis();
   }
+
 
   public void setTransitionsEnabled( boolean enabled ) {
     mTransitionsEnabled = enabled;
@@ -154,24 +174,19 @@ public class Tile {
     return mDetailLevel;
   }
 
+  /**
+   * @deprecated
+   * @return
+   */
   public float getRendered() {
-    if( !mTransitionsEnabled ) {
-      return 1;
-    }
-    double now = AnimationUtils.currentAnimationTimeMillis();
-    double elapsed = now - renderTimestamp;
-    float progress = (float) Math.min( 1, elapsed / mTransitionDuration );
-    if( progress == 1 ) {
-      mTransitionsEnabled = false;
-    }
-    return progress;
+    return mProgress;
   }
 
   public boolean getIsDirty() {
     if( !mTransitionsEnabled ) {
       return false;
     }
-    if( getRendered() < 1f ) {
+    if( mProgress < 1f ) {
       mHasReportedDirtyAtFullOpacity = false;
       return true;
     }
@@ -184,14 +199,12 @@ public class Tile {
 
   public Paint getPaint() {
     if( !mTransitionsEnabled ) {
-      return null;
+      return mPaint = null;
     }
     if( mPaint == null ) {
       mPaint = new Paint();
     }
-    float rendered = getRendered();
-    int opacity = (int) (rendered * 255);
-    mPaint.setAlpha( opacity );
+    mPaint.setAlpha( (int) (255 * mOpacity) );
     return mPaint;
   }
 

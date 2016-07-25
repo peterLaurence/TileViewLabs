@@ -397,7 +397,7 @@ public class TileCanvasViewGroup extends View {
   private Runnable mRenderPostExecuteRunnable = new Runnable() {
     @Override
     public void run() {
-      if( !mTransitionsEnabled ) {
+      if( !mTransitionsEnabled ) {  // TODO: why only if transitions disabled?
         cleanup();
       }
       if( mTileRenderListener != null ) {
