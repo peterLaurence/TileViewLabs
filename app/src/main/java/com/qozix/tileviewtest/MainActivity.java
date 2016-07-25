@@ -25,7 +25,7 @@ public class MainActivity extends AppCompatActivity {
     tileView.addDetailLevel( 1.0000f, "tiles/map/o-%d-%d.jpg" );
 
     tileView.setShouldRenderWhilePanning( true );
-    tileView.setTransitionsEnabled( false );
+    tileView.setTransitionsEnabled( true );
 
 
 

@@ -16,8 +16,7 @@ public class Tile {
   public enum State {
     UNASSIGNED,
     PENDING_DECODE,
-    DECODED,
-    DESTROYED
+    DECODED
   }
 
   private static final int DEFAULT_TRANSITION_DURATION = 200;
@@ -221,7 +220,7 @@ public class Tile {
   }
 
   void destroy( boolean shouldRecycle ) {
-    mState = State.DESTROYED;
+    mState = State.UNASSIGNED;
     if( shouldRecycle && mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();
     }
