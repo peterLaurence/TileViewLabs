@@ -57,6 +57,7 @@ public class TileCanvasViewGroup extends View {
 
   private Set<Tile> mTilesInCurrentViewport = new HashSet<>();
   private Set<Tile> mPreviousLevelDrawnTiles = new HashSet<>();
+  private Set<Tile> mDecodedTilesInCurrentViewport = new HashSet<>();
 
   public TileCanvasViewGroup( Context context ) {
     super( context );
@@ -191,11 +192,17 @@ public class TileCanvasViewGroup extends View {
    */
   private void drawTiles( Canvas canvas ) {
     Log.d( getClass().getSimpleName(), "drawTiles" );
-
+    mFullyOpaqueRegion.setEmpty();
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
-        mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );
+        tile.composeWithOpacity();
+        mDecodedTilesInCurrentViewport.add( tile );
+        if(tile.getIsDirty()){
+          shouldInvalidate = true;
+        } else {
+          mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );  // TODO: scale region not tile
+        }
       }
     }
     Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
@@ -221,15 +228,11 @@ public class TileCanvasViewGroup extends View {
     }
     mFullyOpaqueRegion.setEmpty();
     Log.d( getClass().getSimpleName(), "drawing " + mPreviousLevelDrawnTiles.size() + " previous tiles" );
-    for( Tile tile : mTilesInCurrentViewport ) {
-      if( tile.getState() == Tile.State.DECODED ) {  // TODO: pass this to Tile.draw?
-        boolean dirty = tile.draw( canvas );
-        shouldInvalidate = shouldInvalidate || dirty;
-        if( dirty ) {
-          // TODO:
-        }
-      }
+    for( Tile tile : mDecodedTilesInCurrentViewport ) {
+      boolean dirty = tile.draw( canvas );
+      shouldInvalidate = shouldInvalidate || dirty;
     }
+    mDecodedTilesInCurrentViewport.clear();
     if( shouldInvalidate ) {
       invalidate();
     }
