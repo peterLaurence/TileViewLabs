@@ -84,7 +84,7 @@ class TileRenderRunnable implements Runnable {
       return TileRenderHandler.Status.ERROR;
     }
     if( mCancelled || tile.getBitmap() == null || mThread.isInterrupted() ) {
-      tile.destroy( true );
+      tile.reset();
       return TileRenderHandler.Status.INCOMPLETE;
     }
     return TileRenderHandler.Status.COMPLETE;
@@ -111,7 +111,6 @@ class TileRenderRunnable implements Runnable {
             // need to stamp time now, since it'll be drawn before the handler posts
             tile.setTransitionsEnabled( tileCanvasViewGroup.getTransitionsEnabled() );
             tile.setTransitionDuration( tileCanvasViewGroup.getTransitionDuration() );
-            tile.stampTime();
             Message message = handler.obtainMessage( status.getMessageCode(), this );
             message.sendToTarget();
           }

@@ -16,8 +16,7 @@ public class Tile {
   public enum State {
     UNASSIGNED,
     PENDING_DECODE,
-    DECODED,
-    DESTROYED
+    DECODED
   }
 
   private static final int DEFAULT_TRANSITION_DURATION = 200;
@@ -46,7 +45,7 @@ public class Tile {
   private Rect mRelativeRect = new Rect();
   private Rect mScaledRect = new Rect();
 
-  public double mRenderTimeStamp;
+  public Long mRenderTimeStamp;
 
   private boolean mTransitionsEnabled;
 
@@ -149,19 +148,16 @@ public class Tile {
     if( !mTransitionsEnabled ) {
       return;
     }
-    double now = AnimationUtils.currentAnimationTimeMillis();
-    double elapsed = now - mRenderTimeStamp;
-    mProgress = (float) Math.min( 1, elapsed / mTransitionDuration );
-    //Log.d( getClass().getSimpleName(), "computed progress=" + mProgress);
-    if( mProgress == 1f ) {
-      mTransitionsEnabled = false;
-    }
-  }
-
-  public void stampTime() {
-    if( mTransitionsEnabled ) {
+    if( mRenderTimeStamp == null ) {
       mRenderTimeStamp = AnimationUtils.currentAnimationTimeMillis();
-      mProgress = 0f;
+      mProgress = 0;
+      return;
+    }
+    double elapsed = AnimationUtils.currentAnimationTimeMillis() - mRenderTimeStamp;
+    mProgress = (float) Math.min( 1, elapsed / mTransitionDuration );
+    if( mProgress == 1f ) {
+      mRenderTimeStamp = null;
+      mTransitionsEnabled = false;
     }
   }
 
@@ -176,19 +172,8 @@ public class Tile {
     return mDetailLevel;
   }
 
-  /**
-   * @deprecated
-   * @return
-   */
-  public float getRendered() {
-    return mProgress;
-  }
-
   public boolean getIsDirty() {
-    if( !mTransitionsEnabled ) {
-      return false;
-    }
-    return mProgress < 1f;
+    return mTransitionsEnabled && mProgress < 1f;
   }
 
   public Paint getPaint() {
@@ -210,35 +195,30 @@ public class Tile {
     mState = State.DECODED;
   }
 
-  void destroy( boolean shouldRecycle ) {
+  /**
+   * Deprecated
+   * @param b
+   */
+  void destroy( boolean b ) {
+    reset();
+  }
+
+  void reset() {
     mState = State.UNASSIGNED;
-    if( shouldRecycle && mBitmap != null && !mBitmap.isRecycled() ) {
+    mRenderTimeStamp = null;
+    if( mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();
     }
     mBitmap = null;
-    mProgress = 0f;
-  }
-
-  public void reset() {
-    mState = State.UNASSIGNED;
-    mBitmap = null;
-    mProgress = 0f;
   }
 
   /**
    * @param canvas The canvas the tile's bitmap should be drawn into
-   * @return True if the tile is dirty (drawing output has changed and needs parent validation)
    */
-  boolean draw( Canvas canvas ) {  // TODO: this might squish edge images
+  public void draw( Canvas canvas ) {
     if( mBitmap != null ) {
       canvas.drawBitmap( mBitmap, mIntrinsicRect, mRelativeRect, getPaint() );
-      /*
-      Paint paint = getPaint();
-      String message = paint == null ? "paint is null" : "opacity=" + paint.getAlpha();
-      Log.d( getClass().getSimpleName(), message);
-      */
     }
-    return getIsDirty();
   }
 
   @Override

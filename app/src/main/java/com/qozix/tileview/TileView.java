@@ -295,6 +295,7 @@ public class TileView extends ZoomPanLayout implements
    *
    * The default value is true.
    *
+   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
    * @param shouldRecycleBitmaps True if bitmaps should call Bitmap.recycle when they are removed from view.
    */
   public void setShouldRecycleBitmaps( boolean shouldRecycleBitmaps ) {

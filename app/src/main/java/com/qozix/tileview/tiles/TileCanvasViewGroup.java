@@ -117,10 +117,18 @@ public class TileCanvasViewGroup extends View {
     mRenderBuffer = renderBuffer;
   }
 
+  /**
+   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
+   * @return True if tile bitmaps should be recycled.
+   */
   public boolean getShouldRecycleBitmaps() {
     return mShouldRecycleBitmaps;
   }
 
+  /**
+   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
+   * @param shouldRecycleBitmaps True if tile bitmaps should be recycled.
+   */
   public void setShouldRecycleBitmaps( boolean shouldRecycleBitmaps ) {
     mShouldRecycleBitmaps = shouldRecycleBitmaps;
   }
@@ -204,6 +212,7 @@ public class TileCanvasViewGroup extends View {
   private void drawTiles( Canvas canvas ) {
 
     Log.d( getClass().getSimpleName(), "drawTiles" );
+    
     mFullyOpaqueRegion.setEmpty();
     boolean shouldInvalidate = false;
     for( Tile tile : mTilesInCurrentViewport ) {
@@ -250,8 +259,8 @@ public class TileCanvasViewGroup extends View {
       boolean shouldDrawPreviousTile = isInViewport && !isUnderNewTiles;
       Log.d( getClass().getSimpleName(), "isInViewport? " + isInViewport + ", isUnderNewTiles? " + isUnderNewTiles);
       if( shouldDrawPreviousTile ) {
-        boolean dirty = tile.draw( canvas );
-        shouldInvalidate = shouldInvalidate || dirty;
+        tile.draw( canvas );
+        shouldInvalidate = shouldInvalidate || tile.getIsDirty();
       } else {
         tilesFromLastDetailLevelIterator.remove();
       }
@@ -262,8 +271,8 @@ public class TileCanvasViewGroup extends View {
     mFullyOpaqueRegion.setEmpty();
 
     for( Tile tile : mDecodedTilesInCurrentViewport ) {
-      boolean dirty = tile.draw( canvas );
-      shouldInvalidate = shouldInvalidate || dirty;
+      tile.draw( canvas );
+      shouldInvalidate = shouldInvalidate || tile.getIsDirty();
     }
     mDecodedTilesInCurrentViewport.clear();
     if( shouldInvalidate ) {
@@ -281,13 +290,11 @@ public class TileCanvasViewGroup extends View {
         if( mPreviousLevelDrawnTiles.size() > 0 ) {
           if (!mHasInvalidatedAfterPreviousTiledCleared) {
             for (Tile tile : mPreviousLevelDrawnTiles) {
-              tile.destroy(mShouldRecycleBitmaps);
+              tile.reset();
             }
             mPreviousLevelDrawnTiles.clear();
             Log.d(getClass().getSimpleName(), "we did a hard cleanup, invalidate again so we don't draw the previous tiles");
             mHasInvalidatedAfterPreviousTiledCleared = true;
-            boolean changed = reportCleanup();
-            Log.d( getClass().getSimpleName(), "changed=" + changed);
             invalidate();
           } else {
             Log.d(getClass().getSimpleName(), "should be completely done, don't draw until another explicitly requested (e.g., user interaction)");
@@ -356,16 +363,10 @@ public class TileCanvasViewGroup extends View {
       Tile tile = tilesInCurrentViewportIterator.next();
       // this tile was visible previously, but is no longer, destroy and de-list it
       if( !recentlyComputedVisibleTileSet.contains( tile ) ) {
-        tile.destroy( mShouldRecycleBitmaps );
+        tile.reset();
         tilesInCurrentViewportIterator.remove();
       }
     }
-  }
-
-  private boolean reportCleanup(){
-    int startSize = mTilesInCurrentViewport.size();
-    cleanup();
-    return startSize != mTilesInCurrentViewport.size();
   }
 
   // this tile has been decoded by the time it gets passed here
@@ -374,7 +375,6 @@ public class TileCanvasViewGroup extends View {
       invalidate();
     }
   }
-
 
   void onRenderTaskPreExecute() {
     mIsRendering = true;
@@ -458,11 +458,6 @@ public class TileCanvasViewGroup extends View {
   private Runnable mRenderPostExecuteRunnable = new Runnable() {
     @Override
     public void run() {
-      /*
-      if( !mTransitionsEnabled ) {  // TODO: why only if transitions disabled?
-        cleanup();
-      }
-      */
       cleanup();
       if( mTileRenderListener != null ) {
         mTileRenderListener.onRenderComplete();
@@ -472,14 +467,4 @@ public class TileCanvasViewGroup extends View {
     }
   };
 
-  // TODO: debug
-  private void logTileSet( Set<Tile> tiles ) {
-    StringBuilder builder = new StringBuilder();
-    for( Tile tile : tiles ) {
-      builder.append( tile.toShortString() );
-      builder.append( "," );
-    }
-    String output = builder.toString();
-    Log.d( getClass().getSimpleName(), output );
-  }
 }
