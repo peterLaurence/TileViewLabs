@@ -119,6 +119,10 @@ public class Tile {
     return mBaseRect;
   }
 
+  public Rect getRelativeRect() {
+    return mRelativeRect;
+  }
+
   public Rect getScaledRect( float scale ) {
     mScaledRect.set(
       (int) (mRelativeRect.left * scale),
@@ -157,13 +161,14 @@ public class Tile {
   public void stampTime() {
     if( mTransitionsEnabled ) {
       mRenderTimeStamp = AnimationUtils.currentAnimationTimeMillis();
+      mProgress = 0f;
     }
   }
 
   public void setTransitionsEnabled( boolean enabled ) {
     mTransitionsEnabled = enabled;
     if( enabled ) {
-      mProgress = 0;
+      mProgress = 0f;
     }
   }
 
@@ -206,10 +211,16 @@ public class Tile {
   }
 
   void destroy( boolean shouldRecycle ) {
-    mState = State.DESTROYED;
+    mState = State.UNASSIGNED;
     if( shouldRecycle && mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();
     }
+    mBitmap = null;
+    mProgress = 0f;
+  }
+
+  public void reset() {
+    mState = State.UNASSIGNED;
     mBitmap = null;
     mProgress = 0f;
   }

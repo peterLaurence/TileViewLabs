@@ -49,6 +49,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
           renderSet.remove( tile );
         } else {
           tileRenderRunnable.cancel( true );
+          tile.destroy( tileCanvasViewGroup.getShouldRecycleBitmaps() );
           remove( tileRenderRunnable );
         }
       }
@@ -93,6 +94,10 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
       if( runnable instanceof TileRenderRunnable ) {
         TileRenderRunnable tileRenderRunnable = (TileRenderRunnable) runnable;
         tileRenderRunnable.cancel( true );
+        Tile tile = tileRenderRunnable.getTile();
+        if( tile != null ) {
+          tile.destroy( false );  // TODO:
+        }
       }
     }
     getQueue().clear();

@@ -71,6 +71,10 @@ public class DetailLevel implements Comparable<DetailLevel> {
     return mTilesVisibleInViewport;
   }
 
+  public boolean hasComputedState() {
+    return mLastStateSnapshot != null;
+  }
+
   public void computeVisibleTilesFromViewport() {
     mTilesVisibleInViewport.clear();
     for( int rowCurrent = mLastStateSnapshot.rowStart; rowCurrent < mLastStateSnapshot.rowEnd; rowCurrent++ ) {

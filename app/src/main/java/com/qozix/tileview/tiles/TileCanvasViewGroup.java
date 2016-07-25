@@ -2,7 +2,10 @@ package com.qozix.tileview.tiles;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Region;
 import android.os.Handler;
 import android.os.Looper;
@@ -184,6 +187,12 @@ public class TileCanvasViewGroup extends View {
   }
 
   private Region mFullyOpaqueRegion = new Region();
+  private Path mOpaqueRegionTransformablePath = new Path();
+  private RectF mOpaqueRegionClipBoundsRectF = new RectF();
+  private Rect mOpaqueRegionClipBoundsRect = new Rect();
+  private Region mOpaqueRegionClipBoundsRegion = new Region();
+  private Matrix mRegionTransformMatrix = new Matrix();
+
   private boolean mHasInvalidatedOnCleanOnce;
   private boolean mHasInvalidatedAfterPreviousTiledCleared;
 
@@ -193,6 +202,7 @@ public class TileCanvasViewGroup extends View {
    * @param canvas The Canvas instance to draw tile bitmaps into.
    */
   private void drawTiles( Canvas canvas ) {
+
     Log.d( getClass().getSimpleName(), "drawTiles" );
     mFullyOpaqueRegion.setEmpty();
     boolean shouldInvalidate = false;
@@ -203,18 +213,37 @@ public class TileCanvasViewGroup extends View {
         if(tile.getIsDirty()){
           shouldInvalidate = true;
         } else {
-          mFullyOpaqueRegion.op( tile.getScaledRect( mScale ), Region.Op.UNION );  // TODO: scale region not tile
+          mFullyOpaqueRegion.op( tile.getRelativeRect(), Region.Op.UNION );  // TODO: scale region not tile
         }
       }
     }
-    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedViewport();
+    float invertedScale = 1f / mScale;
+
+    // set the scale value to our current scale - maybe better in setScale?
+    mRegionTransformMatrix.setScale( invertedScale, invertedScale );
+    // get the path of the non-scaled tile rects
+    mFullyOpaqueRegion.getBoundaryPath(mOpaqueRegionTransformablePath);
+    // scale the path
+    mOpaqueRegionTransformablePath.transform( mRegionTransformMatrix );
+    // get the bounds of the path to serve as the clip
+    mOpaqueRegionTransformablePath.computeBounds(mOpaqueRegionClipBoundsRectF, false );
+    // can't create a Region from a RectF, only a Rect, so convert the bounds to a normal Rect
+    mOpaqueRegionClipBoundsRectF.roundOut(mOpaqueRegionClipBoundsRect);
+    // this is the clip, but it can't be a Rect, it has to be a Region, so convert it
+    mOpaqueRegionClipBoundsRegion.set(mOpaqueRegionClipBoundsRect);
+    // now set the opaque region for testing to the scaled path and the clip created above
+    mFullyOpaqueRegion.setPath(mOpaqueRegionTransformablePath, mOpaqueRegionClipBoundsRegion);
+
+    // scaling the viewport rect is much simpler...
+    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedScaledViewport( invertedScale );
+
     Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
     Log.d( getClass().getSimpleName(), "viewport=" + computedViewport.toShortString());
     Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
     Iterator<Tile> tilesFromLastDetailLevelIterator = mPreviousLevelDrawnTiles.iterator();
     while( tilesFromLastDetailLevelIterator.hasNext() ) {
       Tile tile = tilesFromLastDetailLevelIterator.next();
-      Rect rect = tile.getScaledRect( mScale );
+      Rect rect = tile.getRelativeRect();
       Log.d( getClass().getSimpleName(), "rect=" + rect.toShortString());
       boolean isInViewport = Rect.intersects( computedViewport, rect );
       boolean isUnderNewTiles = mFullyOpaqueRegion.contains( rect.left, rect.top ) && mFullyOpaqueRegion.contains( rect.right, rect.bottom );
@@ -228,8 +257,10 @@ public class TileCanvasViewGroup extends View {
       }
       Log.d( getClass().getSimpleName(), "<" + shouldDrawPreviousTile + "> previous tile at " + tile.toShortString() );
     }
-    mFullyOpaqueRegion.setEmpty();
     Log.d( getClass().getSimpleName(), "drawing " + mPreviousLevelDrawnTiles.size() + " previous tiles" );
+
+    mFullyOpaqueRegion.setEmpty();
+
     for( Tile tile : mDecodedTilesInCurrentViewport ) {
       boolean dirty = tile.draw( canvas );
       shouldInvalidate = shouldInvalidate || dirty;
@@ -248,13 +279,15 @@ public class TileCanvasViewGroup extends View {
       } else {
         Log.d( getClass().getSimpleName(), "this is second pass after a clean draw, do a hard cleanup here" );
         if( mPreviousLevelDrawnTiles.size() > 0 ) {
-          for (Tile tile : mPreviousLevelDrawnTiles) {
-            tile.destroy(mShouldRecycleBitmaps);
-          }
-          mPreviousLevelDrawnTiles.clear();
           if (!mHasInvalidatedAfterPreviousTiledCleared) {
+            for (Tile tile : mPreviousLevelDrawnTiles) {
+              tile.destroy(mShouldRecycleBitmaps);
+            }
+            mPreviousLevelDrawnTiles.clear();
             Log.d(getClass().getSimpleName(), "we did a hard cleanup, invalidate again so we don't draw the previous tiles");
             mHasInvalidatedAfterPreviousTiledCleared = true;
+            boolean changed = reportCleanup();
+            Log.d( getClass().getSimpleName(), "changed=" + changed);
             invalidate();
           } else {
             Log.d(getClass().getSimpleName(), "should be completely done, don't draw until another explicitly requested (e.g., user interaction)");
@@ -264,6 +297,7 @@ public class TileCanvasViewGroup extends View {
         }
       }
     }
+
   }
 
   public void updateTileSet( DetailLevel detailLevel ) {  // TODO: need this?
@@ -311,14 +345,11 @@ public class TileCanvasViewGroup extends View {
    * This should seldom be necessary, as it's built into beginRenderTask
    */
   public void cleanup() {
-    Set<Tile> recentlyComputedVisibleTileSet;
-    // these tiles are mathematically within the current viewport, and should be already computed
-    try {
-      recentlyComputedVisibleTileSet = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
-    } catch( DetailLevel.StateNotComputedException e ) {
-      Log.d( "TCVG", "caught" );
+    if( mDetailLevelToRender == null || !mDetailLevelToRender.hasComputedState() ) {
       return;
     }
+    // these tiles are mathematically within the current viewport, and should be already computed
+    Set<Tile> recentlyComputedVisibleTileSet = mDetailLevelToRender.getVisibleTilesFromLastViewportComputation();
     // use an iterator to avoid concurrent modification
     Iterator<Tile> tilesInCurrentViewportIterator = mTilesInCurrentViewport.iterator();
     while( tilesInCurrentViewportIterator.hasNext() ) {
@@ -326,12 +357,16 @@ public class TileCanvasViewGroup extends View {
       // this tile was visible previously, but is no longer, destroy and de-list it
       if( !recentlyComputedVisibleTileSet.contains( tile ) ) {
         tile.destroy( mShouldRecycleBitmaps );
-        // an argument could be made to invalidate this rect, but since it's no longer on the heap, lets leave the artifacts and get some benefit from gpu caching
         tilesInCurrentViewportIterator.remove();
       }
     }
   }
 
+  private boolean reportCleanup(){
+    int startSize = mTilesInCurrentViewport.size();
+    cleanup();
+    return startSize != mTilesInCurrentViewport.size();
+  }
 
   // this tile has been decoded by the time it gets passed here
   void addTileToCanvas( final Tile tile ) {
@@ -423,9 +458,12 @@ public class TileCanvasViewGroup extends View {
   private Runnable mRenderPostExecuteRunnable = new Runnable() {
     @Override
     public void run() {
+      /*
       if( !mTransitionsEnabled ) {  // TODO: why only if transitions disabled?
         cleanup();
       }
+      */
+      cleanup();
       if( mTileRenderListener != null ) {
         mTileRenderListener.onRenderComplete();
       }

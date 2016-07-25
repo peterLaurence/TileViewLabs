@@ -28,6 +28,7 @@ public class MainActivity extends AppCompatActivity {
 
     tileView.setShouldRenderWhilePanning( true );
     tileView.setTransitionsEnabled( true );
+    tileView.getTileCanvasViewGroup().setTransitionDuration( 1000 );
 
     tileView.setOnTouchListener(new View.OnTouchListener() {
       @Override
