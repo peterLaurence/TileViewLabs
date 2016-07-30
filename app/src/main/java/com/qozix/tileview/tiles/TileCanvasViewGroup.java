@@ -146,7 +146,6 @@ public class TileCanvasViewGroup extends View {
 
   public void requestRender() {
     mRenderIsCancelled = false;
-    mRenderIsSuppressed = false;
     if( mDetailLevelToRender == null ) {
       return;
     }
@@ -176,6 +175,12 @@ public class TileCanvasViewGroup extends View {
     mRenderIsSuppressed = true;
   }
 
+  /**
+   * Enables new render tasks to start.
+   */
+  public void resumeRender() {
+    mRenderIsSuppressed = false;
+  }
 
   public boolean getIsRendering() {
     return mIsRendering;
