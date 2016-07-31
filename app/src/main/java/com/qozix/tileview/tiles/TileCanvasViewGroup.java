@@ -10,7 +10,6 @@ import android.graphics.Region;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.util.Log;
 import android.view.View;
 
 import com.qozix.tileview.detail.DetailLevel;
@@ -36,10 +35,8 @@ public class TileCanvasViewGroup extends View {
   private BitmapProvider mBitmapProvider;
 
   private DetailLevel mDetailLevelToRender;
-  private DetailLevel mLastRequestedDetailLevel;
   private DetailLevel mLastRenderedDetailLevel;
 
-  private Rect mDrawingRect = new Rect();
 
   private boolean mRenderIsCancelled = false;
   private boolean mRenderIsSuppressed = false;
@@ -62,6 +59,17 @@ public class TileCanvasViewGroup extends View {
   private Set<Tile> mPreviousLevelDrawnTiles = new HashSet<>();
   private Set<Tile> mDecodedTilesInCurrentViewport = new HashSet<>();
 
+  // opaque region transformation stuff
+  private Region mFullyOpaqueRegion = new Region();
+  private Path mOpaqueRegionTransformablePath = new Path();
+  private RectF mOpaqueRegionClipBoundsRectF = new RectF();
+  private Rect mOpaqueRegionClipBoundsRect = new Rect();
+  private Region mOpaqueRegionClipBoundsRegion = new Region();
+  private Matrix mRegionTransformMatrix = new Matrix();
+
+  private boolean mHasInvalidatedOnCleanOnce;
+  private boolean mHasInvalidatedAfterPreviousTiledCleared;
+
   public TileCanvasViewGroup( Context context ) {
     super( context );
     setWillNotDraw( false );
@@ -76,6 +84,10 @@ public class TileCanvasViewGroup extends View {
 
   public float getScale() {
     return mScale;
+  }
+
+  public float getInvertedScale() {
+    return 1f / mScale;
   }
 
   public boolean getTransitionsEnabled() {
@@ -118,16 +130,16 @@ public class TileCanvasViewGroup extends View {
   }
 
   /**
-   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
    * @return True if tile bitmaps should be recycled.
+   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
    */
   public boolean getShouldRecycleBitmaps() {
     return mShouldRecycleBitmaps;
   }
 
   /**
-   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
    * @param shouldRecycleBitmaps True if tile bitmaps should be recycled.
+   * @deprecated This value is no longer considered - bitmaps are always recycled when they're no longer used.
    */
   public void setShouldRecycleBitmaps( boolean shouldRecycleBitmaps ) {
     mShouldRecycleBitmaps = shouldRecycleBitmaps;
@@ -194,15 +206,111 @@ public class TileCanvasViewGroup extends View {
     }
   }
 
-  private Region mFullyOpaqueRegion = new Region();
-  private Path mOpaqueRegionTransformablePath = new Path();
-  private RectF mOpaqueRegionClipBoundsRectF = new RectF();
-  private Rect mOpaqueRegionClipBoundsRect = new Rect();
-  private Region mOpaqueRegionClipBoundsRegion = new Region();
-  private Matrix mRegionTransformMatrix = new Matrix();
+  private boolean establishOpaqueRegion() {
+    boolean shouldInvalidate = false;
+    for( Tile tile : mTilesInCurrentViewport ) {
+      if( tile.getState() == Tile.State.DECODED ) {
+        tile.computeProgress();
+        mDecodedTilesInCurrentViewport.add( tile );
+        if( tile.getIsDirty() ) {
+          shouldInvalidate = true;
+        } else {
+          mFullyOpaqueRegion.op( tile.getRelativeRect(), Region.Op.UNION );
+        }
+      }
+    }
+    // now scale it down so we don't have to scale every tile rect
+    scaleOpaqueRegion();
+    return shouldInvalidate;
+  }
 
-  private boolean mHasInvalidatedOnCleanOnce;
-  private boolean mHasInvalidatedAfterPreviousTiledCleared;
+  private void scaleOpaqueRegion() {
+    // we need to scale our region to match the unscaled tile Rects
+    float invertedScale = getInvertedScale();
+    // set the scale value to our current scale - maybe better in setScale?
+    mRegionTransformMatrix.setScale( invertedScale, invertedScale );
+    // get the path of the non-scaled tile Rects
+    mFullyOpaqueRegion.getBoundaryPath( mOpaqueRegionTransformablePath );
+    // scale the path
+    mOpaqueRegionTransformablePath.transform( mRegionTransformMatrix );
+    // get the bounds of the path to serve as the clip
+    mOpaqueRegionTransformablePath.computeBounds( mOpaqueRegionClipBoundsRectF, false );
+    // can't create a Region from a RectF, only a Rect, so convert the bounds to a normal Rect
+    mOpaqueRegionClipBoundsRectF.roundOut( mOpaqueRegionClipBoundsRect );
+    // this is the clip, but it can't be a Rect, it has to be a Region, so convert it
+    mOpaqueRegionClipBoundsRegion.set( mOpaqueRegionClipBoundsRect );
+    // now set the opaque region for testing to the scaled path and the clip created above
+    mFullyOpaqueRegion.setPath( mOpaqueRegionTransformablePath, mOpaqueRegionClipBoundsRegion );
+  }
+
+  private boolean drawPreviousTiles( Canvas canvas ) {
+    boolean shouldInvalidate = false;
+    // scaling the viewport rect is much simpler than scaling each tile
+    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedScaledViewport( getInvertedScale() );
+    Iterator<Tile> tilesFromLastDetailLevelIterator = mPreviousLevelDrawnTiles.iterator();
+    while( tilesFromLastDetailLevelIterator.hasNext() ) {
+      Tile tile = tilesFromLastDetailLevelIterator.next();
+      Rect rect = tile.getRelativeRect();
+      boolean isInViewport = Rect.intersects( computedViewport, rect );
+      boolean isUnderNewTiles = mFullyOpaqueRegion.contains( rect.left, rect.top ) && mFullyOpaqueRegion.contains( rect.right, rect.bottom );
+      boolean shouldDrawPreviousTile = isInViewport && !isUnderNewTiles;
+      if( shouldDrawPreviousTile ) {
+        tile.computeProgress();
+        tile.draw( canvas );
+        shouldInvalidate |= tile.getIsDirty();
+      } else {
+        tilesFromLastDetailLevelIterator.remove();
+      }
+    }
+    mFullyOpaqueRegion.setEmpty();
+    return shouldInvalidate;
+  }
+
+  private boolean drawAndClearCurrentDecodedTiles( Canvas canvas ) {
+    boolean shouldInvalidate = false;
+    for( Tile tile : mDecodedTilesInCurrentViewport ) {
+      // these tiles should already have progress computed by the time they get here
+      tile.draw( canvas );
+      shouldInvalidate |= tile.getIsDirty();
+    }
+    mDecodedTilesInCurrentViewport.clear();
+    return shouldInvalidate;
+  }
+
+  private void clearPreviousTiles() {
+    for( Tile tile : mPreviousLevelDrawnTiles ) {
+      tile.reset();
+    }
+    mPreviousLevelDrawnTiles.clear();
+  }
+
+  private void handleInvalidation( boolean shouldInvalidate ) {
+    if( shouldInvalidate ) {
+      // there's more work to do, partially opaque tiles were drawn
+      mHasInvalidatedOnCleanOnce = false;
+      mHasInvalidatedAfterPreviousTiledCleared = false;
+      invalidate();
+    } else {
+      // if all tiles were fully opaque, we need another pass to clear our tiles from last level
+      if( !mHasInvalidatedOnCleanOnce ) {
+        mHasInvalidatedOnCleanOnce = true;
+        invalidate();
+      } else {
+        // if there were no previous tiles, so we should be all done
+        // otherwise, this is second pass after a clean draw, do a hard cleanup here
+        if( mPreviousLevelDrawnTiles.size() > 0 ) {
+          // once there are no more previous tiles, we need to invalidate again to draw without them
+          // otherwise, should be completely done, don't draw until another explicitly requested (e.g., user interaction)
+          if( !mHasInvalidatedAfterPreviousTiledCleared ) {
+            clearPreviousTiles();
+            // we did a hard cleanup, invalidate again so we don't draw the previous tiles
+            mHasInvalidatedAfterPreviousTiledCleared = true;
+            invalidate();
+          }
+        }
+      }
+    }
+  }
 
   /**
    * Draw tile bitmaps into the surface canvas displayed by this View.
@@ -210,101 +318,14 @@ public class TileCanvasViewGroup extends View {
    * @param canvas The Canvas instance to draw tile bitmaps into.
    */
   private void drawTiles( Canvas canvas ) {
-
-    Log.d( getClass().getSimpleName(), "drawTiles" );
-    
-    mFullyOpaqueRegion.setEmpty();
-    boolean shouldInvalidate = false;
-    for( Tile tile : mTilesInCurrentViewport ) {
-      if( tile.getState() == Tile.State.DECODED ) {
-        tile.computeProgress();
-        mDecodedTilesInCurrentViewport.add( tile );
-        if(tile.getIsDirty()){
-          shouldInvalidate = true;
-        } else {
-          mFullyOpaqueRegion.op( tile.getRelativeRect(), Region.Op.UNION );  // TODO: scale region not tile
-        }
-      }
-    }
-    float invertedScale = 1f / mScale;
-
-    // set the scale value to our current scale - maybe better in setScale?
-    mRegionTransformMatrix.setScale( invertedScale, invertedScale );
-    // get the path of the non-scaled tile rects
-    mFullyOpaqueRegion.getBoundaryPath(mOpaqueRegionTransformablePath);
-    // scale the path
-    mOpaqueRegionTransformablePath.transform( mRegionTransformMatrix );
-    // get the bounds of the path to serve as the clip
-    mOpaqueRegionTransformablePath.computeBounds(mOpaqueRegionClipBoundsRectF, false );
-    // can't create a Region from a RectF, only a Rect, so convert the bounds to a normal Rect
-    mOpaqueRegionClipBoundsRectF.roundOut(mOpaqueRegionClipBoundsRect);
-    // this is the clip, but it can't be a Rect, it has to be a Region, so convert it
-    mOpaqueRegionClipBoundsRegion.set(mOpaqueRegionClipBoundsRect);
-    // now set the opaque region for testing to the scaled path and the clip created above
-    mFullyOpaqueRegion.setPath(mOpaqueRegionTransformablePath, mOpaqueRegionClipBoundsRegion);
-
-    // scaling the viewport rect is much simpler...
-    Rect computedViewport = mDetailLevelToRender.getDetailLevelManager().getComputedScaledViewport( invertedScale );
-
-    Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
-    Log.d( getClass().getSimpleName(), "viewport=" + computedViewport.toShortString());
-    Log.d( getClass().getSimpleName(), ">>>>>>>>>>>>>>>" );
-    Iterator<Tile> tilesFromLastDetailLevelIterator = mPreviousLevelDrawnTiles.iterator();
-    while( tilesFromLastDetailLevelIterator.hasNext() ) {
-      Tile tile = tilesFromLastDetailLevelIterator.next();
-      Rect rect = tile.getRelativeRect();
-      Log.d( getClass().getSimpleName(), "rect=" + rect.toShortString());
-      boolean isInViewport = Rect.intersects( computedViewport, rect );
-      boolean isUnderNewTiles = mFullyOpaqueRegion.contains( rect.left, rect.top ) && mFullyOpaqueRegion.contains( rect.right, rect.bottom );
-      boolean shouldDrawPreviousTile = isInViewport && !isUnderNewTiles;
-      Log.d( getClass().getSimpleName(), "isInViewport? " + isInViewport + ", isUnderNewTiles? " + isUnderNewTiles);
-      if( shouldDrawPreviousTile ) {
-        tile.draw( canvas );
-        shouldInvalidate = shouldInvalidate || tile.getIsDirty();
-      } else {
-        tilesFromLastDetailLevelIterator.remove();
-      }
-      Log.d( getClass().getSimpleName(), "<" + shouldDrawPreviousTile + "> previous tile at " + tile.toShortString() );
-    }
-    Log.d( getClass().getSimpleName(), "drawing " + mPreviousLevelDrawnTiles.size() + " previous tiles" );
-
-    mFullyOpaqueRegion.setEmpty();
-
-    for( Tile tile : mDecodedTilesInCurrentViewport ) {
-      tile.draw( canvas );
-      shouldInvalidate = shouldInvalidate || tile.getIsDirty();
-    }
-    mDecodedTilesInCurrentViewport.clear();
-    if( shouldInvalidate ) {
-      Log.d( getClass().getSimpleName(), "there's more work to do, partially opaque tiles were drawn" );
-      mHasInvalidatedOnCleanOnce = false;
-      mHasInvalidatedAfterPreviousTiledCleared = false;
-      invalidate();
-    } else {
-      Log.d( getClass().getSimpleName(), "if all tiles were fully opaque, we need another pass to clear our tiles from last level" );
-      if(!mHasInvalidatedOnCleanOnce){
-        mHasInvalidatedOnCleanOnce = true;
-        invalidate();
-      } else {
-        Log.d( getClass().getSimpleName(), "this is second pass after a clean draw, do a hard cleanup here" );
-        if( mPreviousLevelDrawnTiles.size() > 0 ) {
-          if (!mHasInvalidatedAfterPreviousTiledCleared) {
-            for (Tile tile : mPreviousLevelDrawnTiles) {
-              tile.reset();
-            }
-            mPreviousLevelDrawnTiles.clear();
-            Log.d(getClass().getSimpleName(), "we did a hard cleanup, invalidate again so we don't draw the previous tiles");
-            mHasInvalidatedAfterPreviousTiledCleared = true;
-            invalidate();
-          } else {
-            Log.d(getClass().getSimpleName(), "should be completely done, don't draw until another explicitly requested (e.g., user interaction)");
-          }
-        } else {
-          Log.d(getClass().getSimpleName(), "there were no previous tiles, so we should be all done");
-        }
-      }
-    }
-
+    // compute states, populate opaque region
+    boolean shouldInvalidate = establishOpaqueRegion();
+    // draw any previous tiles that are in viewport and not under full opaque current tiles
+    shouldInvalidate |= drawPreviousTiles( canvas );
+    // draw the current tile set
+    shouldInvalidate |= drawAndClearCurrentDecodedTiles( canvas );
+    // depending on transition states and previous tile draw ops, add'l invalidation might be needed
+    handleInvalidation( shouldInvalidate );
   }
 
   public void updateTileSet( DetailLevel detailLevel ) {  // TODO: need this?
@@ -315,6 +336,12 @@ public class TileCanvasViewGroup extends View {
       return;
     }
     cancelRender();
+    markTilesAsPrevious();
+    mDetailLevelToRender = detailLevel;
+    requestRender();
+  }
+
+  private void markTilesAsPrevious(){
     mPreviousLevelDrawnTiles.clear();
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
@@ -322,30 +349,24 @@ public class TileCanvasViewGroup extends View {
       }
     }
     mTilesInCurrentViewport.clear();
-    mDetailLevelToRender = detailLevel;
-    requestRender();
   }
 
   private void beginRenderTask() {
-
     // if visible columns and rows are same as previously computed, fast-fail
-    boolean changed = mDetailLevelToRender.computeCurrentState();  // TODO: maintain compare state here instead?
+    boolean changed = mDetailLevelToRender.computeCurrentState();
     if( !changed && mDetailLevelToRender.equals( mLastRenderedDetailLevel ) ) {
       return;
     }
-
     // determine tiles are mathematically within the current viewport; force re-computation
     mDetailLevelToRender.computeVisibleTilesFromViewport();
-
     // get rid of anything outside, use previously computed intersections
     cleanup();
-
+    // are there any new tiles the Executor isn't already aware of?
     boolean wereTilesAdded = mTilesInCurrentViewport.addAll( mDetailLevelToRender.getVisibleTilesFromLastViewportComputation() );
-
+    // if so, start up a new batch
     if( wereTilesAdded && mTileRenderPoolExecutor != null ) {
       mTileRenderPoolExecutor.queue( this, mTilesInCurrentViewport );
     }
-
   }
 
   /**
