@@ -69,6 +69,7 @@ public class TileCanvasViewGroup extends View {
 
   private boolean mHasInvalidatedOnCleanOnce;
   private boolean mHasInvalidatedAfterPreviousTiledCleared;
+  public boolean mPendingAnimation;
 
   public TileCanvasViewGroup( Context context ) {
     super( context );
@@ -158,7 +159,6 @@ public class TileCanvasViewGroup extends View {
 
   public void requestRender() {
     mRenderIsCancelled = false;
-    mRenderIsSuppressed = false;
     if( mDetailLevelToRender == null ) {
       return;
     }
@@ -188,6 +188,12 @@ public class TileCanvasViewGroup extends View {
     mRenderIsSuppressed = true;
   }
 
+  /**
+   * Enables new render tasks to start.
+   */
+  public void resumeRender() {
+    mRenderIsSuppressed = false;
+  }
 
   public boolean getIsRendering() {
     return mIsRendering;
@@ -301,7 +307,7 @@ public class TileCanvasViewGroup extends View {
         if( mPreviousLevelDrawnTiles.size() > 0 ) {
           // once there are no more previous tiles, we need to invalidate again to draw without them
           // otherwise, should be completely done, don't draw until another explicitly requested (e.g., user interaction)
-          if( !mHasInvalidatedAfterPreviousTiledCleared ) {
+          if( !mHasInvalidatedAfterPreviousTiledCleared && !mPendingAnimation ) {
             clearPreviousTiles();
             // we did a hard cleanup, invalidate again so we don't draw the previous tiles
             mHasInvalidatedAfterPreviousTiledCleared = true;
