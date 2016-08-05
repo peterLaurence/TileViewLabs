@@ -364,7 +364,7 @@ public class TileCanvasViewGroup extends View {
     // are there any new tiles the Executor isn't already aware of?
     boolean wereTilesAdded = mTilesInCurrentViewport.addAll( mDetailLevelToRender.getVisibleTilesFromLastViewportComputation() );
     // if so, start up a new batch
-    if( wereTilesAdded && mTileRenderPoolExecutor != null ) {
+    if( wereTilesAdded ) {
       mTileRenderPoolExecutor.queue( this, mTilesInCurrentViewport );
     }
   }

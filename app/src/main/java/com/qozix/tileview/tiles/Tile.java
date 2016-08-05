@@ -5,11 +5,14 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.util.Log;
 import android.view.animation.AnimationUtils;
 
 import com.qozix.tileview.detail.DetailLevel;
 import com.qozix.tileview.geom.FloatMathHelper;
 import com.qozix.tileview.graphics.BitmapProvider;
+
+import java.lang.ref.WeakReference;
 
 public class Tile {
 
@@ -54,6 +57,8 @@ public class Tile {
   private Paint mPaint;
 
   private DetailLevel mDetailLevel;
+
+  private WeakReference<TileRenderRunnable> mTileRenderRunnableWeakReference;
 
   public Tile( int column, int row, int width, int height, Object data, DetailLevel detailLevel ) {
     mRow = row;
@@ -144,6 +149,15 @@ public class Tile {
     mState = state;
   }
 
+  public void execute( TileRenderPoolExecutor tileRenderPoolExecutor ) {
+    TileRenderRunnable runnable = new TileRenderRunnable();
+    mTileRenderRunnableWeakReference = new WeakReference<>( runnable );
+    runnable.setTile( this );
+    runnable.setTileRenderPoolExecutor( tileRenderPoolExecutor );
+    tileRenderPoolExecutor.execute( runnable );
+    setState( Tile.State.PENDING_DECODE );
+  }
+
   public void computeProgress(){
     if( !mTransitionsEnabled ) {
       return;
@@ -193,6 +207,7 @@ public class Tile {
     }
     mBitmap = bitmapProvider.getBitmap( this, context );
     mState = State.DECODED;
+    Log.d( "TV", "generateBitmap for " + toShortString());
   }
 
   /**
@@ -204,12 +219,21 @@ public class Tile {
   }
 
   void reset() {
+    if( mState == State.PENDING_DECODE ) {
+      if ( mTileRenderRunnableWeakReference != null ) {
+        TileRenderRunnable runnable = mTileRenderRunnableWeakReference.get();
+        if( runnable != null ) {
+          runnable.cancel( true );
+        }
+      }
+    }
     mState = State.UNASSIGNED;
     mRenderTimeStamp = null;
     if( mBitmap != null && !mBitmap.isRecycled() ) {
       mBitmap.recycle();
     }
     mBitmap = null;
+    Log.d( "TV", "reset for " + toShortString());
   }
 
   /**

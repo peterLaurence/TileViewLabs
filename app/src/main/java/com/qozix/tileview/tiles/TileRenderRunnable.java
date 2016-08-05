@@ -27,6 +27,12 @@ class TileRenderRunnable implements Runnable {
     }
     boolean cancelled = mCancelled;
     mCancelled = true;
+    if( mTileRenderPoolExecutorWeakReference != null ) {
+      TileRenderPoolExecutor tileRenderPoolExecutor = mTileRenderPoolExecutorWeakReference.get();
+      if(tileRenderPoolExecutor != null){
+        tileRenderPoolExecutor.remove( this );
+      }
+    }
     return !cancelled;
   }
 
