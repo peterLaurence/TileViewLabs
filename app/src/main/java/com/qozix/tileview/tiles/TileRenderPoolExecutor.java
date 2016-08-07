@@ -45,10 +45,7 @@ public class TileRenderPoolExecutor extends ThreadPoolExecutor {
         if( tile == null ) {
           continue;
         }
-        if( renderSet.contains( tile ) ) {
-          renderSet.remove( tile );
-        } else {
-          tileRenderRunnable.cancel( true );
+        if( !renderSet.contains( tile ) ) {
           tile.reset();
           remove( tileRenderRunnable );
         }
