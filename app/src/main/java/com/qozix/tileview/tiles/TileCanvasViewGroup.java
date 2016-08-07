@@ -158,11 +158,7 @@ public class TileCanvasViewGroup extends View {
 
   public void requestRender() {
     mRenderIsCancelled = false;
-    mRenderIsSuppressed = false;
     if( mDetailLevelToRender == null ) {
-      return;
-    }
-    if( mDetailLevelToRender.getDetailLevelManager().getIsLocked() ) {
       return;
     }
     if( !mTileRenderThrottleHandler.hasMessages( RENDER_FLAG ) ) {
@@ -188,6 +184,12 @@ public class TileCanvasViewGroup extends View {
     mRenderIsSuppressed = true;
   }
 
+  /**
+   * Enables new render tasks to start.
+   */
+  public void resumeRender() {
+    mRenderIsSuppressed = false;
+  }
 
   public boolean getIsRendering() {
     return mIsRendering;
@@ -207,7 +209,7 @@ public class TileCanvasViewGroup extends View {
   }
 
   private boolean establishOpaqueRegion() {
-    boolean shouldInvalidate = false;
+    boolean shouldInvalidate = mTilesInCurrentViewport.isEmpty();
     for( Tile tile : mTilesInCurrentViewport ) {
       if( tile.getState() == Tile.State.DECODED ) {
         tile.computeProgress();

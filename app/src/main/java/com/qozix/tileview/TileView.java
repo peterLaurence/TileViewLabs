@@ -268,6 +268,13 @@ public class TileView extends ZoomPanLayout implements
   }
 
   /**
+   * Notify the TileView that it should resume tiles rendering.
+   */
+  public void resumeRender() {
+    mTileCanvasViewGroup.resumeRender();
+  }
+
+  /**
    * Sets a custom class to perform the getBitmap operation when tile bitmaps are requested for
    * tile images only.
    * By default, a BitmapDecoder implementation is provided that renders bitmaps from the context's
@@ -799,7 +806,7 @@ public class TileView extends ZoomPanLayout implements
 
   @Override
   public void onPanBegin( int x, int y, Origination origin ) {
-    suppressRender();
+
   }
 
   @Override
@@ -814,8 +821,8 @@ public class TileView extends ZoomPanLayout implements
 
   @Override
   public void onZoomBegin( float scale, Origination origin ) {
-    if( !mShouldUpdateDetailLevelWhileZooming ) {  // TODO: this might be only appropriate for progammatic zooms...  @peterLaurence what do you think?
-      mDetailLevelManager.lockDetailLevel();
+    if ( origin == null ) {
+      mTileCanvasViewGroup.suppressRender();
     }
     mDetailLevelManager.setScale( scale );
   }
@@ -827,7 +834,9 @@ public class TileView extends ZoomPanLayout implements
 
   @Override
   public void onZoomEnd( float scale, Origination origin ) {
-    mDetailLevelManager.unlockDetailLevel();
+    if ( origin == null ) {
+      mTileCanvasViewGroup.resumeRender();
+    }
     mDetailLevelManager.setScale( scale );
     requestRender();
   }

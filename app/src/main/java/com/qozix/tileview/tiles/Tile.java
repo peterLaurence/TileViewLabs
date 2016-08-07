@@ -207,7 +207,6 @@ public class Tile {
     }
     mBitmap = bitmapProvider.getBitmap( this, context );
     mState = State.DECODED;
-    Log.d( "TV", "generateBitmap for " + toShortString());
   }
 
   /**
@@ -233,7 +232,6 @@ public class Tile {
       mBitmap.recycle();
     }
     mBitmap = null;
-    Log.d( "TV", "reset for " + toShortString());
   }
 
   /**
